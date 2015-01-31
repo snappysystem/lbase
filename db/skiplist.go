@@ -23,7 +23,10 @@ import (
 
 // A random generator to decide that how many levels that a new key
 // should be inserted into.
-var levels = [...]int{8, 64, 512, 4096, 32768, 262144}
+var (
+	levels = [...]int{8, 64, 512, 4096, 32768, 262144}
+	levelsSlice = levels[:]
+)
 
 const maxLevel = len(levels)
 
@@ -41,9 +44,8 @@ func makeRandomGenerator() *randomGenerator {
 func (x *randomGenerator) get() int {
 	max := levels[maxLevel-1]
 	val := x.r.Intn(max)
-	i := sort.Search(maxLevel, func(i int) bool {
-		return levels[i] >= val
-	})
+	// i will always be less than @maxLevel
+	i := sort.SearchInts(levelsSlice, val)
 	return (maxLevel - i - 1)
 }
 
