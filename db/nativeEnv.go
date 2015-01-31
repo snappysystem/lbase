@@ -5,6 +5,10 @@ import "os"
 type NativeEnv struct {
 }
 
+func MakeNativeEnv() Env {
+	return NativeEnv{}
+}
+
 func (a NativeEnv) NewSequentialFile(name string) (f SequentialFile, s Status) {
 	f = MakeLocalSequentialFile(name)
 	if f == nil {

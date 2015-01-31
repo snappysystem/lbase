@@ -7,7 +7,7 @@ import (
 
 func TestCreateAndRemoveDir(t *testing.T) {
 	dir := "/tmp/env_test/testCreateAndRemoveDir"
-	env := NativeEnv{}
+	env := MakeNativeEnv()
 	s := env.DeleteDir(dir)
 	if !s.Ok() || env.FileExists(dir) {
 		t.Error("Fails to delete dir")
@@ -21,7 +21,7 @@ func TestCreateAndRemoveDir(t *testing.T) {
 
 func TestRenameDir(t *testing.T) {
 	dir := "/tmp/env_test/testRenameDir"
-	env := NativeEnv{}
+	env := MakeNativeEnv()
 	target := strings.Join([]string{dir, ".new"}, "")
 
 	env.DeleteDir(dir)
