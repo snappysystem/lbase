@@ -30,45 +30,45 @@ type Comparator interface {
 // A structure that carry's the result of an operation
 type Status struct {
 	ok, notFound, corruption, ioError bool
-	str string
+	str                               string
 }
 
 func MakeStatusOk() Status {
 	return Status{
-		ok: true,
-		notFound: false,
+		ok:         true,
+		notFound:   false,
 		corruption: false,
-		ioError: false,
+		ioError:    false,
 	}
 }
 
 func MakeStatusNotFound(msg string) Status {
 	return Status{
-		ok: false,
-		notFound: true,
+		ok:         false,
+		notFound:   true,
 		corruption: false,
-		ioError: false,
-		str: msg,
+		ioError:    false,
+		str:        msg,
 	}
 }
 
 func MakeStatusCorruption(msg string) Status {
 	return Status{
-		ok: false,
-		notFound: false,
+		ok:         false,
+		notFound:   false,
 		corruption: true,
-		ioError: false,
-		str: msg,
+		ioError:    false,
+		str:        msg,
 	}
 }
 
 func MakeStatusIoError(msg string) Status {
 	return Status{
-		ok: false,
-		notFound: false,
+		ok:         false,
+		notFound:   false,
 		corruption: false,
-		ioError: true,
-		str: msg,
+		ioError:    true,
+		str:        msg,
 	}
 }
 
