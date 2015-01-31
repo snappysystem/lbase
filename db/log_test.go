@@ -11,7 +11,7 @@ import (
 func MakeReallyLongRecord(howLong int) []byte {
 	ret := make([]byte, howLong)
 	var ch byte
-	for idx,_ := range ret {
+	for idx, _ := range ret {
 		ret[idx] = ch
 		ch++
 	}
@@ -98,7 +98,7 @@ func TestReaderWriterAcrossSingleBlock(t *testing.T) {
 
 	// prepare records to be appended
 	firstRecord := "hello world"
-	secondRecord := MakeReallyLongRecord(kBlockSize+2)
+	secondRecord := MakeReallyLongRecord(kBlockSize + 2)
 	thirdRecord := "go programming is fun"
 
 	records := [][]byte{
@@ -162,7 +162,7 @@ func TestReaderWriterAcrossMultiBlock(t *testing.T) {
 
 	// prepare records to be appended
 	firstRecord := "hello world"
-	secondRecord := MakeReallyLongRecord(2*kBlockSize+2)
+	secondRecord := MakeReallyLongRecord(2*kBlockSize + 2)
 	thirdRecord := "go programming is fun"
 
 	records := [][]byte{
