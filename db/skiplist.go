@@ -24,7 +24,7 @@ import (
 // A random generator to decide that how many levels that a new key
 // should be inserted into.
 var (
-	levels = [...]int{8, 64, 512, 4096, 32768, 262144}
+	levels      = [...]int{8, 64, 512, 4096, 32768, 262144}
 	levelsSlice = levels[:]
 )
 
