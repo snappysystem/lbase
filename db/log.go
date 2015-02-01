@@ -43,6 +43,16 @@ type LogWriter struct {
 	file WritableFile
 }
 
+// Given full path, return a new log writer
+func MakeLogWriter(e Env, fpath string) *LogWriter {
+	wf, status := e.NewWritableFile(fpath)
+	if !status.Ok() {
+		return nil
+	}
+
+	return &LogWriter{file: wf}
+}
+
 func (w *LogWriter) AddRecord(record []byte) Status {
 	header := [kHeaderSize]byte{}
 
@@ -119,6 +129,10 @@ func (w *LogWriter) AddRecord(record []byte) Status {
 	return MakeStatusOk()
 }
 
+func (w *LogWriter) Close() {
+	w.file.Close()
+}
+
 const (
 	ReadStatusOk = iota
 	ReadStatusEOF
@@ -129,6 +143,20 @@ type LogReader struct {
 	file     SequentialFile
 	off      int64
 	checksum bool
+}
+
+// Given a full path, return a reader object
+func MakeLogReader(e Env, fpath string, off int64, checksum bool) *LogReader {
+	rf, status := e.NewSequentialFile(fpath)
+	if !status.Ok() {
+		return nil
+	}
+
+	return &LogReader{
+		file:     rf,
+		off:      off,
+		checksum: checksum,
+	}
 }
 
 func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {

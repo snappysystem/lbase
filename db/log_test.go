@@ -27,13 +27,10 @@ func TestLoggerWriteAndReadBack(t *testing.T) {
 
 	// create a new file and writer
 	name := strings.Join([]string{root, "log"}, "/")
-	wf := MakeLocalWritableFile(name)
-
-	if wf == nil {
+	writer := MakeLogWriter(MakeNativeEnv(), name)
+	if writer == nil {
 		t.Error("Fails to create a new log file ", name)
 	}
-
-	writer := LogWriter{wf}
 
 	// prepare records to be appended
 	strRecords := []string{"hello, world", "go programming", "key value"}
@@ -51,15 +48,14 @@ func TestLoggerWriteAndReadBack(t *testing.T) {
 		}
 	}
 
-	wf.Close()
+	writer.Close()
 
 	// open the file for read
-	rf := MakeLocalSequentialFile(name)
-	if rf == nil {
+	reader := MakeLogReader(MakeNativeEnv(), name, int64(0), true)
+	if reader == nil {
 		t.Error("Fail to open a file for read")
 	}
 
-	reader := LogReader{rf, int64(0), true}
 	buf := make([]byte, 2048)
 
 	// read and validate the records
@@ -152,13 +148,10 @@ func TestReaderWriterAcrossMultiBlock(t *testing.T) {
 
 	// create a new file and writer
 	name := strings.Join([]string{root, "log"}, "/")
-	wf := MakeLocalWritableFile(name)
-
-	if wf == nil {
+	writer := MakeLogWriter(MakeNativeEnv(), name)
+	if writer == nil {
 		t.Error("Fails to create a new log file ", name)
 	}
-
-	writer := LogWriter{wf}
 
 	// prepare records to be appended
 	firstRecord := "hello world"
@@ -179,15 +172,14 @@ func TestReaderWriterAcrossMultiBlock(t *testing.T) {
 		}
 	}
 
-	wf.Close()
+	writer.Close()
 
 	// open the file for read
-	rf := MakeLocalSequentialFile(name)
-	if rf == nil {
+	reader := MakeLogReader(MakeNativeEnv(), name, int64(0), true)
+	if reader == nil {
 		t.Error("Fail to open a file for read")
 	}
 
-	reader := LogReader{rf, int64(0), true}
 	buf := make([]byte, 4*kBlockSize)
 
 	// read and validate the records
