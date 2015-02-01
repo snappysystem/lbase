@@ -4,17 +4,10 @@ package db
 //
 // Action (or redo) logs are used widely in DB implementations to help
 // recovery from crash. Each action is stored as a record in the log
-// file. There are a few requirements for such a log stream:
+// file
 //
-// (1) overtime, log data may become really big. An implementation that
-// can trim legacy records is needed;
-//
-// This implementation uses multiple files to represent a log stream.
-// Older log files that we no longer need can be removed.
-//
-// (2) A server may crash at any time. The last record in the stream
-// may be partial and should be identified and discarded during recovery
-// later;
+// A server may crash at any time. The last record in the stream may be
+// partial and should be identified and discarded during recovery later;
 //
 // The implementation uses crc checksum to identify corruptted record
 // at the end of log stream.
@@ -152,6 +145,11 @@ func MakeLogReader(e Env, fpath string, off int64, checksum bool) *LogReader {
 		return nil
 	}
 
+	status = rf.Skip(off)
+	if !status.Ok() {
+		return nil
+	}
+
 	return &LogReader{
 		file:     rf,
 		off:      off,
@@ -162,15 +160,21 @@ func MakeLogReader(e Env, fpath string, off int64, checksum bool) *LogReader {
 func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 	header := [kHeaderSize]byte{}
 	buffer := scratch
+
+	// size of the record
 	size := 0
+	// current offset in the file
+	off := r.off
 
 	for firstIter := true; true; firstIter = false {
-		offInBlock := r.off % kBlockSize
+		offInBlock := off % kBlockSize
 		availInBlock := int(kBlockSize - offInBlock)
 
 		switch {
 		case availInBlock > kHeaderSize:
 			tmp, s := r.file.Read(header[:])
+			off = off + int64(len(tmp))
+
 			switch {
 			case !s.Ok():
 				status = ReadStatusCorruption
@@ -197,6 +201,8 @@ func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 			size = size + toRead
 
 			tmp, s = r.file.Read(buffer[:toRead])
+			off = off + int64(len(tmp))
+
 			if !s.Ok() || len(tmp) != toRead {
 				status = ReadStatusCorruption
 				return
@@ -213,6 +219,7 @@ func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 			case kFullType:
 				if firstIter {
 					ret, status = tmp, ReadStatusOk
+					r.off = off
 				} else {
 					status = ReadStatusCorruption
 				}
@@ -223,6 +230,7 @@ func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 					status = ReadStatusCorruption
 				} else {
 					ret, status = scratch[:size], ReadStatusOk
+					r.off = off
 				}
 				return
 
@@ -233,6 +241,8 @@ func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 
 		default:
 			s := r.file.Skip(int64(availInBlock))
+			off = off + int64(availInBlock)
+
 			if !s.Ok() {
 				status = ReadStatusCorruption
 				return
