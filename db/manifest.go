@@ -15,6 +15,12 @@ const (
 	ManifestPrefix = "manifest_"
 )
 
+// A list of requests
+const (
+	ManifestCreateFile byte = iota
+	ManifestNewSnapshot
+)
+
 // In-memory representation of each nsst file.
 // File may be deleted if refcnt reaches 0 (i.e. no iterator
 // refers to it, and there is no explicit snapshot request
@@ -43,15 +49,16 @@ type FileSnapshotInfo struct {
 // for next manifest file.
 type ManifestData struct {
 	FileMap          map[int64]FileInfo
-	NextId           uint64
+	NextId           int64
 	FileSnapshotMap  map[int64]FileSnapshotInfo
 	NextFileSnapshot int64
 }
 
 type Manifest struct {
 	ManifestData
-	env   Env
-	rwMux sync.RWMutex
+	env    Env
+	rwMux  sync.RWMutex
+	writer *LogWriter
 }
 
 // Parse base file name, return its manifest number. If the base
@@ -171,6 +178,60 @@ func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
 
 	if ret == nil && createIfMissing {
 		ret = initNewManifest(e, parent)
+	}
+
+	return ret
+}
+
+// create a new nsst file, return the file number.
+func (m *Manifest) CreateFile(replay bool) int64 {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	ret := m.NextId
+	m.NextId++
+
+	// If this is not replay, write a log record.
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestCreateFile)
+		m.writer.AddRecord(buf.Bytes())
+	}
+
+	return ret
+}
+
+type NewSnapshotRequest struct {
+	Levels [][]int64
+	Files  map[int64]FileInfo
+}
+
+// Create a most recent snapshot. Return snapshot Id back. This is usually called
+// after a merge (compaction)
+func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	ret := m.NextFileSnapshot
+	m.NextFileSnapshot++
+
+	m.FileSnapshotMap[ret] = FileSnapshotInfo{Levels: req.Levels}
+
+	// Add new files
+	for id, info := range req.Files {
+		_, ok := m.FileMap[id]
+		if !ok {
+			m.FileMap[id] = info
+		}
+	}
+
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestNewSnapshot)
+		enc.Encode(req)
+		m.writer.AddRecord(buf.Bytes())
 	}
 
 	return ret
