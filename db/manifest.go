@@ -56,9 +56,9 @@ type ManifestData struct {
 
 type Manifest struct {
 	ManifestData
-	env    Env
-	rwMux  sync.RWMutex
-	writer *LogWriter
+	env     Env
+	rwMutex sync.RWMutex
+	writer  *LogWriter
 	// Unlike Refcnt field in SnapshotInfo, this map records
 	// session based references. For example, if a user requests
 	// to make a permanent snapshot, the Refcnt field in
@@ -193,8 +193,8 @@ func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
 
 // create a new nsst file, return the file number.
 func (m *Manifest) CreateFile(replay bool) int64 {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	ret := m.NextId
 	m.NextId++
@@ -218,8 +218,8 @@ type NewSnapshotRequest struct {
 // Create a most recent snapshot. Return snapshot Id back. This is usually called
 // after a merge (compaction)
 func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	ret := m.NextSnapshot
 	m.NextSnapshot++
@@ -270,8 +270,8 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 // to lock a snapshot (so that it will not be deleted after a new change
 // in file set).
 func (m *Manifest) AddRef() int64 {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	ret := m.NextSnapshot - 1
 	val, _ := m.snapshotRefcntMap[ret]
@@ -283,8 +283,8 @@ func (m *Manifest) AddRef() int64 {
 // Give up reference to particular snapshot. This usually occurs when
 // an iterator becomes out of scope.
 func (m *Manifest) DeleteRef(snapshot int64) {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	val, ok := m.snapshotRefcntMap[snapshot]
 	if !ok {
@@ -316,8 +316,8 @@ func (m *Manifest) DeleteRef(snapshot int64) {
 // Create a snapshot. After this operation, the system will not delete files that
 // are included in the snapshot until it is removed.
 func (m *Manifest) MakeSnapshot() int64 {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	ret := m.NextSnapshot - 1
 	val, ok := m.SnapshotMap[ret]
@@ -333,8 +333,8 @@ func (m *Manifest) MakeSnapshot() int64 {
 
 // Remove the snapshot made through previous MakeSnapshot() call.
 func (m *Manifest) DeleteSnapshot(snapshot int64) {
-	m.rwMux.Lock()
-	defer m.rwMux.Unlock()
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
 
 	val, ok := m.SnapshotMap[snapshot]
 	if !ok {
@@ -353,6 +353,34 @@ func (m *Manifest) DeleteSnapshot(snapshot int64) {
 	} else {
 		panic("Refcnt should not be negative!")
 	}
+}
+
+// Return the list of levels and files for a given snapshot
+func (m *Manifest) GetSnapshotInfo(snapshot int64) [][]FileInfo {
+	var ret [][]FileInfo
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+
+	val, ok := m.SnapshotMap[snapshot]
+	if !ok {
+		return ret
+	}
+
+	for _, files := range val.Levels {
+		var tmp []FileInfo
+		for _, id := range files {
+			info, found := m.FileMap[id]
+			if !found {
+				panic("Fails to find file info!")
+			}
+
+			tmp = append(tmp, info)
+		}
+
+		ret = append(ret, tmp)
+	}
+
+	return ret
 }
 
 // Remove a snapshot from SnapshotMap, dereferencing all files in the snapshot.
