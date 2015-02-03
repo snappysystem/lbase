@@ -36,7 +36,7 @@ type FileInfo struct {
 // the system creates a new snapshot. Old snapshot will be
 // deleted if its refcnt becomes 0 (i.e. no iterator refers
 // to it, and there is no explicit snapshot request for it)
-type FileSnapshotInfo struct {
+type SnapshotInfo struct {
 	Levels [][]int64
 	Refcnt int
 }
@@ -50,7 +50,7 @@ type FileSnapshotInfo struct {
 type ManifestData struct {
 	FileMap          map[int64]FileInfo
 	NextId           int64
-	FileSnapshotMap  map[int64]FileSnapshotInfo
+	SnapshotMap      map[int64]SnapshotInfo
 	NextFileSnapshot int64
 }
 
@@ -59,6 +59,14 @@ type Manifest struct {
 	env    Env
 	rwMux  sync.RWMutex
 	writer *LogWriter
+	// Unlike Refcnt field in SnapshotInfo, this map records
+	// session based references. For example, if a user requests
+	// to make a permanent snapshot, the Refcnt field in
+	// SnapshotInfo should be incremented. If a user creates
+	// an iterator, however, the refcnt in this map should
+	// be incremented instead. All such references will be
+	// gone once the application exits.
+	snapshotRefcntMap map[int64]int
 }
 
 // Parse base file name, return its manifest number. If the base
@@ -150,8 +158,8 @@ func recoverSingleManifest(e Env, fullPath string) *Manifest {
 func initNewManifest(e Env, parent string) *Manifest {
 	ret := Manifest{
 		ManifestData: ManifestData{
-			FileMap:         make(map[int64]FileInfo),
-			FileSnapshotMap: make(map[int64]FileSnapshotInfo),
+			FileMap:     make(map[int64]FileInfo),
+			SnapshotMap: make(map[int64]SnapshotInfo),
 		},
 		env: e,
 	}
@@ -213,16 +221,61 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 	m.rwMux.Lock()
 	defer m.rwMux.Unlock()
 
+	previousSnapshotNumber := int64(-1)
+	for k, _ := range m.SnapshotMap {
+		if k > previousSnapshotNumber {
+			previousSnapshotNumber = k
+		}
+	}
+
 	ret := m.NextFileSnapshot
 	m.NextFileSnapshot++
 
-	m.FileSnapshotMap[ret] = FileSnapshotInfo{Levels: req.Levels}
+	m.SnapshotMap[ret] = SnapshotInfo{
+		Levels: req.Levels,
+		Refcnt: 1,
+	}
 
 	// Add new files
 	for id, info := range req.Files {
-		_, ok := m.FileMap[id]
+		orig, ok := m.FileMap[id]
 		if !ok {
 			m.FileMap[id] = info
+		} else {
+			orig.Refcnt++
+			m.FileMap[id] = orig
+		}
+	}
+
+	// We have a new up-to-date snapshot, remove the previous one if possible.
+	if previousSnapshotNumber >= 0 {
+		val := m.SnapshotMap[previousSnapshotNumber]
+		val.Refcnt--
+
+		if val.Refcnt == 0 {
+			// If there is no pending iterators on previous snapshot,
+			// remove it from snapshot map.
+			count, _ := m.snapshotRefcntMap[previousSnapshotNumber]
+			if count == 0 {
+				for _, level := range val.Levels {
+					for _, id := range level {
+						fi, ok := m.FileMap[id]
+						if !ok {
+							panic("Unreferenced file id")
+						}
+
+						fi.Refcnt--
+
+						// No one refers to the file, remove it
+						if fi.Refcnt == 0 {
+							m.env.DeleteFile(fi.Location)
+							delete(m.FileMap, id)
+						} else {
+							m.FileMap[id] = fi
+						}
+					}
+				}
+			}
 		}
 	}
 
