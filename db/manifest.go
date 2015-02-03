@@ -3,6 +3,7 @@ package db
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"path"
 	"sort"
 	"strconv"
@@ -19,6 +20,8 @@ const (
 const (
 	ManifestCreateFile byte = iota
 	ManifestNewSnapshot
+	ManifestMakeSnapshot
+	ManifestDeleteSnapshot
 )
 
 // In-memory representation of each nsst file.
@@ -83,6 +86,10 @@ func ParseManifestName(fname string) int64 {
 	} else {
 		return numVal
 	}
+}
+
+func MakeManifestName(number int64) string {
+	return fmt.Sprintf("%s%010d", ManifestPrefix, number)
 }
 
 // Helper type to sort slice of int64
@@ -164,7 +171,15 @@ func initNewManifest(e Env, parent string) *Manifest {
 		env: e,
 	}
 
-	return &ret
+	number := ret.CreateFile(false)
+	base := MakeManifestName(number)
+	fullPath := path.Join(parent, base)
+
+	if !ret.saveAndInit([]string{}, fullPath) {
+		return nil
+	} else {
+		return &ret
+	}
 }
 
 func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
@@ -176,7 +191,7 @@ func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
 			tmp := recoverSingleManifest(e, fullPath)
 			if tmp != nil {
 				ret = tmp
-				continue
+				break
 			}
 		}
 
@@ -186,6 +201,13 @@ func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
 
 	if ret == nil && createIfMissing {
 		ret = initNewManifest(e, parent)
+	} else {
+		number := ret.CreateFile(false)
+		base := MakeManifestName(number)
+		fullPath := path.Join(parent, base)
+		if !ret.saveAndInit(paths, fullPath) {
+			return nil
+		}
 	}
 
 	return ret
@@ -315,7 +337,7 @@ func (m *Manifest) DeleteRef(snapshot int64) {
 
 // Create a snapshot. After this operation, the system will not delete files that
 // are included in the snapshot until it is removed.
-func (m *Manifest) MakeSnapshot() int64 {
+func (m *Manifest) MakeSnapshot(replay bool) int64 {
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
@@ -328,11 +350,18 @@ func (m *Manifest) MakeSnapshot() int64 {
 	val.Refcnt++
 	m.SnapshotMap[ret] = val
 
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestMakeSnapshot)
+		m.writer.AddRecord(buf.Bytes())
+	}
+
 	return ret
 }
 
 // Remove the snapshot made through previous MakeSnapshot() call.
-func (m *Manifest) DeleteSnapshot(snapshot int64) {
+func (m *Manifest) DeleteSnapshot(snapshot int64, replay bool) {
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
@@ -352,6 +381,14 @@ func (m *Manifest) DeleteSnapshot(snapshot int64) {
 		}
 	} else {
 		panic("Refcnt should not be negative!")
+	}
+
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestDeleteSnapshot)
+		enc.Encode(snapshot)
+		m.writer.AddRecord(buf.Bytes())
 	}
 }
 
@@ -412,4 +449,46 @@ func (m *Manifest) removeSnapshotUnsafe(snapshot int64) {
 	}
 
 	delete(m.SnapshotMap, snapshot)
+}
+
+func (m *Manifest) saveAndInit(allExistingFiles []string, fullPath string) bool {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	enc.Encode(m)
+	data := buf.Bytes()
+
+	wf, status := m.env.NewWritableFile(fullPath)
+	if !status.Ok() {
+		return false
+	}
+
+	defer wf.Close()
+
+	// File format: 4 bytes length at the beginning.
+	tmp := make([]byte, 4)
+	*(*int32)(unsafe.Pointer(&tmp[0])) = int32(len(data))
+
+	status = wf.Append(tmp)
+	if !status.Ok() {
+		return false
+	}
+
+	// File format: followed by the snapshot.
+	status = wf.Append(data)
+	if !status.Ok() {
+		return false
+	}
+
+	// After successfully commit the snapshot, there is no need for previous
+	// manifest files. Remove all of them.
+	status = wf.Flush()
+	if status.Ok() {
+		for _, fpath := range allExistingFiles {
+			m.env.DeleteFile(fpath)
+		}
+	}
+
+	// File format: followed by redo logs.
+	m.writer = MakeLogWriter(m.env, fullPath)
+	return true
 }
