@@ -250,24 +250,7 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 			// remove it from snapshot map.
 			count, _ := m.snapshotRefcntMap[ret-1]
 			if count == 0 {
-				for _, level := range val.Levels {
-					for _, id := range level {
-						fi, ok := m.FileMap[id]
-						if !ok {
-							panic("Unreferenced file id")
-						}
-
-						fi.Refcnt--
-
-						// No one refers to the file, remove it
-						if fi.Refcnt == 0 {
-							m.env.DeleteFile(fi.Location)
-							delete(m.FileMap, id)
-						} else {
-							m.FileMap[id] = fi
-						}
-					}
-				}
+				m.removeSnapshotUnsafe(ret - 1)
 			}
 		}
 	}
@@ -281,4 +264,82 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 	}
 
 	return ret
+}
+
+// Add reference to the latest snapshot. This is usually used by an iterator
+// to lock a snapshot (so that it will not be deleted after a new change
+// in file set).
+func (m *Manifest) AddRef() int64 {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	ret := m.NextSnapshot - 1
+	val, _ := m.snapshotRefcntMap[ret]
+	m.snapshotRefcntMap[ret] = val + 1
+
+	return ret
+}
+
+// Give up reference to particular snapshot. This usually occurs when
+// an iterator becomes out of scope.
+func (m *Manifest) DeleteRef(snapshot int64) {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	val, ok := m.snapshotRefcntMap[snapshot]
+	if !ok {
+		panic("Requested snapshot does not exist!")
+	}
+
+	val--
+
+	if val > 0 {
+		m.snapshotRefcntMap[snapshot] = val
+	} else if val == 0 {
+		delete(m.snapshotRefcntMap, snapshot)
+		// If there is no persistent reference, remove associated files
+		tmp, ok := m.SnapshotMap[snapshot]
+		if !ok {
+			panic("Fails to find snapshot!")
+		}
+		tmp.Refcnt--
+		if tmp.Refcnt == 0 {
+			m.removeSnapshotUnsafe(snapshot)
+		} else {
+			m.SnapshotMap[snapshot] = tmp
+		}
+	} else {
+		panic("reference count becomes negative!")
+	}
+}
+
+// Remove a snapshot from SnapshotMap, dereferencing all files in the snapshot.
+// If file's reference count reaches 0, dereferance those files as well.
+// The caller should lock mutex.
+func (m *Manifest) removeSnapshotUnsafe(snapshot int64) {
+	val, found := m.SnapshotMap[snapshot]
+	if !found {
+		panic("snapshot not found!")
+	}
+
+	for _, level := range val.Levels {
+		for _, id := range level {
+			fi, ok := m.FileMap[id]
+			if !ok {
+				panic("Unreferenced file id")
+			}
+
+			fi.Refcnt--
+
+			// No one refers to the file, remove it
+			if fi.Refcnt == 0 {
+				m.env.DeleteFile(fi.Location)
+				delete(m.FileMap, id)
+			} else {
+				m.FileMap[id] = fi
+			}
+		}
+	}
+
+	delete(m.SnapshotMap, snapshot)
 }
