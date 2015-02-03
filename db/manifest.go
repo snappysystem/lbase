@@ -313,6 +313,48 @@ func (m *Manifest) DeleteRef(snapshot int64) {
 	}
 }
 
+// Create a snapshot. After this operation, the system will not delete files that
+// are included in the snapshot until it is removed.
+func (m *Manifest) MakeSnapshot() int64 {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	ret := m.NextSnapshot - 1
+	val, ok := m.SnapshotMap[ret]
+	if !ok {
+		return ret
+	}
+
+	val.Refcnt++
+	m.SnapshotMap[ret] = val
+
+	return ret
+}
+
+// Remove the snapshot made through previous MakeSnapshot() call.
+func (m *Manifest) DeleteSnapshot(snapshot int64) {
+	m.rwMux.Lock()
+	defer m.rwMux.Unlock()
+
+	val, ok := m.SnapshotMap[snapshot]
+	if !ok {
+		panic("Fails to find snapshot!")
+	}
+
+	val.Refcnt--
+
+	if val.Refcnt > 0 {
+		m.SnapshotMap[snapshot] = val
+	} else if val.Refcnt == 0 {
+		_, ok = m.snapshotRefcntMap[snapshot]
+		if !ok {
+			m.removeSnapshotUnsafe(snapshot)
+		}
+	} else {
+		panic("Refcnt should not be negative!")
+	}
+}
+
 // Remove a snapshot from SnapshotMap, dereferencing all files in the snapshot.
 // If file's reference count reaches 0, dereferance those files as well.
 // The caller should lock mutex.
