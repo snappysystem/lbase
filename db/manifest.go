@@ -48,10 +48,10 @@ type SnapshotInfo struct {
 // data structure is serialized to a new file as the base
 // for next manifest file.
 type ManifestData struct {
-	FileMap          map[int64]FileInfo
-	NextId           int64
-	SnapshotMap      map[int64]SnapshotInfo
-	NextFileSnapshot int64
+	FileMap      map[int64]FileInfo
+	NextId       int64
+	SnapshotMap  map[int64]SnapshotInfo
+	NextSnapshot int64
 }
 
 type Manifest struct {
@@ -221,15 +221,8 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 	m.rwMux.Lock()
 	defer m.rwMux.Unlock()
 
-	previousSnapshotNumber := int64(-1)
-	for k, _ := range m.SnapshotMap {
-		if k > previousSnapshotNumber {
-			previousSnapshotNumber = k
-		}
-	}
-
-	ret := m.NextFileSnapshot
-	m.NextFileSnapshot++
+	ret := m.NextSnapshot
+	m.NextSnapshot++
 
 	m.SnapshotMap[ret] = SnapshotInfo{
 		Levels: req.Levels,
@@ -248,14 +241,14 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 	}
 
 	// We have a new up-to-date snapshot, remove the previous one if possible.
-	if previousSnapshotNumber >= 0 {
-		val := m.SnapshotMap[previousSnapshotNumber]
+	if ret > 0 {
+		val := m.SnapshotMap[ret-1]
 		val.Refcnt--
 
 		if val.Refcnt == 0 {
 			// If there is no pending iterators on previous snapshot,
 			// remove it from snapshot map.
-			count, _ := m.snapshotRefcntMap[previousSnapshotNumber]
+			count, _ := m.snapshotRefcntMap[ret-1]
 			if count == 0 {
 				for _, level := range val.Levels {
 					for _, id := range level {
