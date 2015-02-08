@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	ManifestPrefix = "manifest_"
+	ManifestPrefix  = "manifest_"
+	kMaxRecordBytes = 1024 * 1024
 )
 
 // A list of requests
@@ -151,6 +152,11 @@ func recoverSingleManifest(e Env, fullPath string) *Manifest {
 	snapshotSize := *(*int32)(unsafe.Pointer(&dataReads[0]))
 	dataSnapshot := make([]byte, snapshotSize)
 
+	dataReads, status = file.Read(dataSnapshot)
+	if !status.Ok() || len(dataReads) != int(snapshotSize) {
+		return nil
+	}
+
 	// use gob to decode it
 	buffer := bytes.NewBuffer(dataSnapshot)
 	dec := gob.NewDecoder(buffer)
@@ -159,11 +165,64 @@ func recoverSingleManifest(e Env, fullPath string) *Manifest {
 		return nil
 	}
 
+	// Use a log reader to read logs.
+	reader := MakeLogReader(e, fullPath, int64(snapshotSize+4), true)
+	if reader == nil {
+		return nil
+	}
+
+	tmpBuf := make([]byte, kMaxRecordBytes)
+	for {
+		readBuf, status := reader.ReadRecord(tmpBuf)
+		if status == ReadStatusEOF {
+			break
+		} else if status != ReadStatusOk {
+			return nil
+		}
+
+		replayBuf := bytes.NewBuffer(readBuf)
+		dec := gob.NewDecoder(replayBuf)
+		var action byte
+		err := dec.Decode(&action)
+		if err != nil {
+			return nil
+		}
+
+		switch action {
+		case ManifestCreateFile:
+			ret.CreateFile(true)
+
+		case ManifestNewSnapshot:
+			var req NewSnapshotRequest
+			err = dec.Decode(&req)
+			if err != nil {
+				return nil
+			}
+
+			ret.NewSnapshot(&req, true)
+
+		case ManifestMakeSnapshot:
+			ret.MakeSnapshot(true)
+
+		case ManifestDeleteSnapshot:
+			var snapshot int64
+			err = dec.Decode(&snapshot)
+			if err != nil {
+				return nil
+			}
+
+			ret.DeleteSnapshot(snapshot, true)
+
+		default:
+			return nil
+		}
+	}
+
 	return &ret
 }
 
 func initNewManifest(e Env, parent string) *Manifest {
-	ret := Manifest{
+	ret := &Manifest{
 		ManifestData: ManifestData{
 			FileMap:     make(map[int64]FileInfo),
 			SnapshotMap: make(map[int64]SnapshotInfo),
@@ -171,14 +230,14 @@ func initNewManifest(e Env, parent string) *Manifest {
 		env: e,
 	}
 
-	number := ret.CreateFile(false)
+	number := ret.CreateFile(true)
 	base := MakeManifestName(number)
 	fullPath := path.Join(parent, base)
 
 	if !ret.saveAndInit([]string{}, fullPath) {
 		return nil
 	} else {
-		return &ret
+		return ret
 	}
 }
 
@@ -201,8 +260,8 @@ func RecoverManifest(e Env, parent string, createIfMissing bool) *Manifest {
 
 	if ret == nil && createIfMissing {
 		ret = initNewManifest(e, parent)
-	} else {
-		number := ret.CreateFile(false)
+	} else if ret != nil {
+		number := ret.CreateFile(true)
 		base := MakeManifestName(number)
 		fullPath := path.Join(parent, base)
 		if !ret.saveAndInit(paths, fullPath) {
@@ -491,4 +550,9 @@ func (m *Manifest) saveAndInit(allExistingFiles []string, fullPath string) bool 
 	// File format: followed by redo logs.
 	m.writer = MakeLogWriter(m.env, fullPath)
 	return true
+}
+
+// Close a manifest file. This method is only useful for testing purpose.
+func (m *Manifest) Close() {
+	m.writer.Close()
 }
