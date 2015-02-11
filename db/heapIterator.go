@@ -172,10 +172,10 @@ func (hi *HeapIterator) Next() {
 
 	// Skip same key in higher levels
 	for hi.Valid() && hi.comp.Compare(hi.Key(), prevKey) == 0 {
-		tmp := hi.Pop().(IteratorPair)
+		tmp := heap.Pop(hi).(IteratorPair)
 		tmp.iter.Next()
 		if tmp.iter.Valid() {
-			hi.Push(tmp)
+			heap.Push(hi, tmp)
 		}
 	}
 }
@@ -205,10 +205,10 @@ func (hi *HeapIterator) Prev() {
 
 	// Skip same key in higher levels
 	for hi.Valid() && hi.comp.Compare(hi.Key(), prevKey) == 0 {
-		tmp := hi.Pop().(IteratorPair)
+		tmp := heap.Pop(hi).(IteratorPair)
 		tmp.iter.Prev()
 		if tmp.iter.Valid() {
-			hi.Push(tmp)
+			heap.Push(hi, tmp)
 		}
 	}
 }
