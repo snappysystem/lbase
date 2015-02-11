@@ -23,7 +23,7 @@ func TestCreateAndEnumerateBlock(t *testing.T) {
 	}
 
 	// test entries are in the block
-	order := &BytesSkiplistOrder{}
+	order := ByteOrder(0)
 	iter := block.NewIterator(order)
 
 	iter.SeekToFirst()
@@ -68,7 +68,7 @@ func TestBlockRandomSeek(t *testing.T) {
 	}
 
 	// seek to one entry in the block
-	order := &BytesSkiplistOrder{}
+	order := ByteOrder(0)
 	iter := block.NewIterator(order)
 	iter.Seek([]byte("103"))
 
@@ -106,7 +106,7 @@ func TestBlockBackwardSeek(t *testing.T) {
 	}
 
 	// seek to one entry in the block
-	order := &BytesSkiplistOrder{}
+	order := ByteOrder(0)
 	iter := block.NewIterator(order)
 	iter.Seek([]byte("103"))
 
@@ -153,7 +153,7 @@ func TestBlockEncodeDecode(t *testing.T) {
 		block := DecodeBlock(data, endOffset)
 
 		// seek to one entry in the block
-		order := &BytesSkiplistOrder{}
+		order := ByteOrder(0)
 		iter := block.NewIterator(order)
 		iter.Seek([]byte("103"))
 
@@ -212,7 +212,7 @@ func TestCreateAndEnumerateMultiBlock(t *testing.T) {
 		offset = offset + uint32(len(block.data))
 	}
 
-	order := &BytesSkiplistOrder{}
+	order := ByteOrder(0)
 
 	// test entries are in last block
 	{

@@ -13,7 +13,6 @@ package db
 // levels
 
 import (
-	"bytes"
 	"math/rand"
 	"sort"
 	"sync/atomic"
@@ -139,13 +138,6 @@ func (a *skiplistPointerNode) setChild(child skiplistNode) {
 	a.child = child
 }
 
-type BytesSkiplistOrder struct {
-}
-
-func (x BytesSkiplistOrder) Compare(a, b []byte) int {
-	return bytes.Compare(a, b)
-}
-
 type Skiplist struct {
 	levels   []skiplistNode
 	gen      *randomGenerator
@@ -160,7 +152,7 @@ func MakeSkiplist(args ...interface{}) *Skiplist {
 
 	switch len(args) {
 	case 0:
-		ret.order = &BytesSkiplistOrder{}
+		ret.order = ByteOrder(0)
 	case 1:
 		ret.order = args[0].(Comparator)
 	default:

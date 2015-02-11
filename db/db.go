@@ -1,5 +1,7 @@
 package db
 
+import "bytes"
+
 // A local key value store that closely follow google's level db API.
 
 // A class to enumerate all entries in the key value store
@@ -155,4 +157,10 @@ type WritableFile interface {
 	Size() int64
 	Close() Status
 	Flush() Status
+}
+
+type ByteOrder int
+
+func (x ByteOrder) Compare(a, b []byte) int {
+	return bytes.Compare(a, b)
 }

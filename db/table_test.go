@@ -31,7 +31,7 @@ func TestBuildTableAndIterate(t *testing.T) {
 		}
 	}
 
-	order := &BytesSkiplistOrder{}
+	order := ByteOrder(0)
 	res := b.Finalize(order)
 
 	if res == nil {
@@ -91,7 +91,7 @@ func TestBuildTableAndRecover(t *testing.T) {
 			b.Add(key, key)
 		}
 
-		order := &BytesSkiplistOrder{}
+		order := ByteOrder(0)
 		res := b.Finalize(order)
 
 		if res == nil {
@@ -126,7 +126,7 @@ func TestBuildTableAndRecover(t *testing.T) {
 		}
 
 		buf := make([]byte, fsize)
-		order := &BytesSkiplistOrder{}
+		order := ByteOrder(0)
 
 		table := RecoverTable(f, buf, order)
 		if table == nil {
