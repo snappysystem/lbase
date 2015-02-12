@@ -55,9 +55,9 @@ func (h *iteratorHeap) Less(i, j int) bool {
 		} else if val > 0 {
 			return true
 		} else if h.iters[i].level < h.iters[j].level {
-			return false
-		} else {
 			return true
+		} else {
+			return false
 		}
 	}
 }

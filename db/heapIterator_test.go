@@ -7,7 +7,7 @@ import (
 
 // An iterator class that walk through a slice of strings.
 type SliceIterator struct {
-	name string  // Use as value field.
+	name string // Use as value field.
 	vals []string
 	idx  int
 }
@@ -194,5 +194,15 @@ func TestHeapIteratorHideLevels(t *testing.T) {
 
 	if string(it.Key()) != "zero" {
 		t.Error("expectation does not meet")
+	}
+
+	it.Prev()
+
+	if !it.Valid() {
+		t.Error("did not find the key")
+	}
+
+	if string(it.Value()) != "first" {
+		t.Error("expectation does not meet", string(it.Value()))
 	}
 }
