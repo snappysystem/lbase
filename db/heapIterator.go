@@ -156,7 +156,9 @@ func (hi *HeapIterator) Next() {
 		for idx, it := range hi.fullSet {
 			it.Seek(prevKey)
 			if it.Valid() {
-				it.Next()
+				if hi.comp.Compare(prevKey, it.Key()) == 0 {
+					it.Next()
+				}
 				if it.Valid() {
 					pair := IteratorPair{iter: it, level: idx}
 					list = append(list, pair)
@@ -190,6 +192,12 @@ func (hi *HeapIterator) Prev() {
 			it.Seek(prevKey)
 			if it.Valid() {
 				it.Prev()
+				if it.Valid() {
+					pair := IteratorPair{iter: it, level: idx}
+					list = append(list, pair)
+				}
+			} else {
+				it.SeekToLast()
 				if it.Valid() {
 					pair := IteratorPair{iter: it, level: idx}
 					list = append(list, pair)

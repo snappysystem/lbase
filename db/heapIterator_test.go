@@ -109,3 +109,56 @@ func TestHeapIteratorBackward(t *testing.T) {
 		it.Prev()
 	}
 }
+
+func TestHeapIteratorMoveAround(t *testing.T) {
+	l0 := &SliceIterator{vals: []string{"hello", "test"}, idx: 0}
+	l1 := &SliceIterator{vals: []string{"abc", "sample"}, idx: 0}
+	l2 := &SliceIterator{vals: []string{"play"}, idx: 0}
+
+	iters := []Iterator{}
+
+	iters = append(iters, l0)
+	iters = append(iters, l1)
+	iters = append(iters, l2)
+
+	it := MakeHeapIterator(iters, ByteOrder(0))
+	it.Seek([]byte("play"))
+
+	if !it.Valid() {
+		t.Error("Iterator is not valid")
+	}
+
+	if string(it.Key()) != "play" {
+		t.Error("Key does not match")
+	}
+
+	it.Next()
+
+	if !it.Valid() {
+		t.Error("Iterator is not valid")
+	}
+
+	if string(it.Key()) != "sample" {
+		t.Error("Key does not match")
+	}
+
+	it.Prev()
+
+	if !it.Valid() {
+		t.Error("Iterator is not valid")
+	}
+
+	if string(it.Key()) != "play" {
+		t.Error("Key does not match ", string(it.Key()))
+	}
+
+	it.Next()
+
+	if !it.Valid() {
+		t.Error("Iterator is not valid")
+	}
+
+	if string(it.Key()) != "sample" {
+		t.Error("Key does not match")
+	}
+}
