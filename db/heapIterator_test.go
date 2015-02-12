@@ -7,6 +7,7 @@ import (
 
 // An iterator class that walk through a slice of strings.
 type SliceIterator struct {
+	name string  // Use as value field.
 	vals []string
 	idx  int
 }
@@ -40,7 +41,7 @@ func (it *SliceIterator) Key() []byte {
 }
 
 func (it *SliceIterator) Value() []byte {
-	return it.Key()
+	return []byte(it.name)
 }
 
 func TestHeapIteratorForward(t *testing.T) {
@@ -160,5 +161,38 @@ func TestHeapIteratorMoveAround(t *testing.T) {
 
 	if string(it.Key()) != "sample" {
 		t.Error("Key does not match")
+	}
+}
+
+func TestHeapIteratorHideLevels(t *testing.T) {
+	l0 := &SliceIterator{name: "first", vals: []string{"hello", "test"}, idx: 0}
+	l1 := &SliceIterator{name: "second", vals: []string{"abc", "test"}, idx: 0}
+	l2 := &SliceIterator{name: "third", vals: []string{"zero"}, idx: 0}
+
+	iters := []Iterator{}
+
+	iters = append(iters, l0)
+	iters = append(iters, l1)
+	iters = append(iters, l2)
+
+	it := MakeHeapIterator(iters, ByteOrder(0))
+	it.Seek([]byte("test"))
+
+	if !it.Valid() {
+		t.Error("did not find the key")
+	}
+
+	if string(it.Key()) != "test" || string(it.Value()) != "first" {
+		t.Error("expectation does not meet")
+	}
+
+	it.Next()
+
+	if !it.Valid() {
+		t.Error("did not find the key")
+	}
+
+	if string(it.Key()) != "zero" {
+		t.Error("expectation does not meet")
 	}
 }
