@@ -23,6 +23,7 @@ const (
 	ManifestNewSnapshot
 	ManifestMakeSnapshot
 	ManifestDeleteSnapshot
+	ManifestResetLog
 )
 
 // In-memory representation of each nsst file.
@@ -56,6 +57,7 @@ type ManifestData struct {
 	NextId       int64
 	SnapshotMap  map[int64]SnapshotInfo
 	NextSnapshot int64
+	LogName      string
 }
 
 type Manifest struct {
@@ -212,6 +214,15 @@ func recoverSingleManifest(e Env, fullPath string) *Manifest {
 			}
 
 			ret.DeleteSnapshot(snapshot, true)
+
+		case ManifestResetLog:
+			var fname string
+			err = dec.Decode(&fname)
+			if err != nil {
+				return nil
+			}
+
+			ret.ResetLog(fname, true)
 
 		default:
 			return nil
@@ -447,6 +458,21 @@ func (m *Manifest) DeleteSnapshot(snapshot int64, replay bool) {
 		enc := gob.NewEncoder(&buf)
 		enc.Encode(ManifestDeleteSnapshot)
 		enc.Encode(snapshot)
+		m.writer.AddRecord(buf.Bytes())
+	}
+}
+
+// Change log file name.
+func (m *Manifest) ResetLog(fname string, replay bool) {
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
+
+	m.LogName = fname
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestResetLog)
+		enc.Encode(fname)
 		m.writer.AddRecord(buf.Bytes())
 	}
 }
