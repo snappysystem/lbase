@@ -323,3 +323,12 @@ func TestReaderWriterAcrossMultiBlock(t *testing.T) {
 		t.Error("Suppose to end at this point")
 	}
 }
+
+func TestLogFileName(t *testing.T) {
+	number := int64(0x123456789)
+	fname := GetLogName(number)
+	res := ParseLogName(fname)
+	if res != number {
+		t.Error("Fails to parse log file name")
+	}
+}

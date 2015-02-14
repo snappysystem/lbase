@@ -13,7 +13,10 @@ package db
 // at the end of log stream.
 
 import (
+	"fmt"
 	"hash/crc32"
+	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -30,6 +33,9 @@ const (
 	kFirstType  = 2
 	kMiddleType = 3
 	kLastType   = 4
+
+	// Base name suffix for a log file.
+	kLogSuffix = "_db.log"
 )
 
 type LogWriter struct {
@@ -252,4 +258,29 @@ func (r *LogReader) ReadRecord(scratch []byte) (ret []byte, status int) {
 
 	panic("Should not reach here!")
 	return
+}
+
+// Given a log file's base name, return the log number. If the base name
+// is not valid, return a negative value
+func ParseLogName(basename string) int64 {
+	if !strings.HasSuffix(basename, kLogSuffix) {
+		return -1
+	}
+
+	numStr := strings.TrimRight(basename, kLogSuffix)
+	if len(numStr) == 0 {
+		return -1
+	}
+
+	ret, err := strconv.ParseInt(numStr, 10, 64)
+	if err != nil {
+		return -1
+	}
+
+	return ret
+}
+
+// Given a log number, return a wellformed log file base name.
+func GetLogName(logNumber int64) string {
+	return fmt.Sprintf("%010d%s", logNumber, kLogSuffix)
 }
