@@ -477,9 +477,14 @@ func (m *Manifest) ResetLog(fname string, replay bool) {
 	}
 }
 
+type FileInfoEx struct {
+	FileInfo
+	id int64
+}
+
 // Return the list of levels and files for a given snapshot
-func (m *Manifest) GetSnapshotInfo(snapshot int64) [][]FileInfo {
-	var ret [][]FileInfo
+func (m *Manifest) GetSnapshotInfo(snapshot int64) [][]FileInfoEx {
+	var ret [][]FileInfoEx
 	m.rwMutex.RLock()
 	defer m.rwMutex.RUnlock()
 
@@ -489,14 +494,17 @@ func (m *Manifest) GetSnapshotInfo(snapshot int64) [][]FileInfo {
 	}
 
 	for _, files := range val.Levels {
-		var tmp []FileInfo
+		var tmp []FileInfoEx
 		for _, id := range files {
 			info, found := m.FileMap[id]
 			if !found {
 				panic("Fails to find file info!")
 			}
 
-			tmp = append(tmp, info)
+			tmp = append(tmp, FileInfoEx{
+				FileInfo: info,
+				id:       id,
+			})
 		}
 
 		ret = append(ret, tmp)
@@ -576,6 +584,13 @@ func (m *Manifest) saveAndInit(allExistingFiles []string, fullPath string) bool 
 	// File format: followed by redo logs.
 	m.writer = MakeLogWriter(m.env, fullPath)
 	return true
+}
+
+// Get the most recent snapshot version
+func (m *Manifest) GetCurrentSnapshot() int64 {
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+	return m.NextSnapshot - 1
 }
 
 // Close a manifest file. This method is only useful for testing purpose.
