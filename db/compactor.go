@@ -112,6 +112,79 @@ func (c *Compactor) L0Compaction() {
 
 // Merge all L0 tables and some of Ln tables.
 func (c *Compactor) MergeCompaction() {
+	/*sId := c.manifest.GetCurrentSnapshot()
+	sinfo := c.manifest.GetSnapshotInfo(sId)
+
+	_, oldList := c.impl.RotateSkiplist()
+
+	// Build heap iterator.
+	skipIter := oldList.NewIterator(&ReadOptions{})
+	skipIter.SeekToFirst()
+
+	iterList := make([]Iterator, 0, c.maxL0Levels)
+
+	if skipIter.Valid() {
+		iterList = append(iterList, skipIter)
+	}
+
+	for idx,infos := range sinfo {
+		if idx >= c.maxL0Levels {
+			break;
+		}
+	}
+
+	fileNumber := c.manifest.CreateFile(false)
+	finfo := FileInfo{
+		Location: path.Join(c.impl.GetPath(), MakeManifestName(fileNumber)),
+		BeginKey: iter.Key(),
+		Refcnt:   1,
+	}
+
+	fh, status := c.impl.GetEnv().NewWritableFile(finfo.Location)
+	if !status.Ok() {
+		panic("Fails to create a new sst file!")
+	}
+
+	builder := MakeTableBuilder(fh)
+
+	for iter.Valid() {
+		builder.Add(iter.Key(), iter.Value())
+	}
+
+	// Get the last element
+	iter.Prev()
+	finfo.EndKey = iter.Key()
+
+	builder.Finalize(c.impl.GetComparator())
+
+	newReq := NewSnapshotRequest{
+		Levels: make([][]int64, 0, len(sinfo)),
+		Files:  map[int64]FileInfo{fileNumber: finfo},
+	}
+
+	// Copy previous L0 levels over.
+	idx := 0
+	for ; idx < c.maxL0Levels && idx < len(sinfo) && len(sinfo[idx]) > 0; idx++ {
+		tmp := make([]int64, 0, len(sinfo[idx]))
+		for _, val := range sinfo[idx] {
+			tmp = append(tmp, val.id)
+		}
+		newReq.Levels = append(newReq.Levels, tmp)
+	}
+
+	// Insert a new level into L0
+	newReq.Levels = append(newReq.Levels, []int64{fileNumber})
+
+	// Copy all Ln levels over.
+	for ; idx < len(sinfo); idx++ {
+		tmp := make([]int64, 0, len(sinfo[idx]))
+		for _, val := range sinfo[idx] {
+			tmp = append(tmp, val.id)
+		}
+		newReq.Levels = append(newReq.Levels, tmp)
+	}
+
+	c.manifest.NewSnapshot(&newReq, false)*/
 }
 
 func (c *Compactor) LnCompaction() {

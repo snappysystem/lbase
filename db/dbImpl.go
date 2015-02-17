@@ -1,8 +1,91 @@
 package db
 
 import (
+	"container/list"
 	"sync"
 )
+
+// A FIFO queue for table cache.
+type TableQueue struct {
+	list     *list.List
+	capacity int
+}
+
+// Add a new table Id into queue. Return the oldest one in the queue, or
+// -1 if there are less than @capacity elements in the queue
+func (tq *TableQueue) Add(id int64) (int64, *list.Element) {
+	element := &list.Element{Value: id}
+	tq.list.PushFront(element)
+	if tq.list.Len() < tq.capacity {
+		return -1, element
+	} else {
+		tmp := tq.list.Back()
+		ret := tmp.Value.(int64)
+		tq.list.Remove(tmp)
+		return ret, element
+	}
+}
+
+// Move the accessed element to the front of the queue
+func (tq *TableQueue) Access(element *list.Element) {
+	tq.list.MoveToFront(element)
+}
+
+type tblInfo struct {
+	table   *Table
+	element *list.Element
+	mtx     sync.Mutex
+}
+
+// Manage cache of tables.
+type TableCache struct {
+	mutex    sync.Mutex
+	tableMap map[int64]tblInfo
+	queue    TableQueue
+}
+
+func MakeTableCache(capacity int) *TableCache {
+	return &TableCache{
+		tableMap: map[int64]tblInfo{},
+		queue:    TableQueue{capacity: capacity},
+	}
+}
+
+// Add a table into cache.
+func (tc *TableCache) Add(table *Table, id int64) {
+	tc.mutex.Lock()
+	defer tc.mutex.Unlock()
+
+	_, found := tc.tableMap[id]
+	if found {
+		panic("New table should not be in the cache!")
+	}
+
+	oldId, element := tc.queue.Add(id)
+	tc.tableMap[id] = tblInfo{table: table, element: element}
+	if oldId >= 0 {
+		delete(tc.tableMap, oldId)
+	}
+}
+
+func (tc *TableCache) Get(id int64) *Table {
+	tc.mutex.Lock()
+	// Find if the table is already in cache
+	info, found := tc.tableMap[id]
+	if found {
+		tc.queue.Access(info.element)
+		tc.mutex.Unlock()
+		return info.table
+	}
+
+	// Put a place holder.
+	info = tblInfo{}
+	info.mtx.Lock()
+	tc.tableMap[id] = info
+	tc.mutex.Unlock()
+
+	return nil
+}
 
 type DbImpl struct {
 	path     string
