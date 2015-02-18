@@ -593,6 +593,14 @@ func (m *Manifest) GetCurrentSnapshot() int64 {
 	return m.NextSnapshot - 1
 }
 
+// Get file information for @id.
+func (m *Manifest) GetFileInfo(id int64) (FileInfo, bool) {
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+	info, found := m.FileMap[id]
+	return info, found
+}
+
 // Close a manifest file. This method is only useful for testing purpose.
 func (m *Manifest) Close() {
 	m.writer.Close()

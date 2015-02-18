@@ -34,7 +34,7 @@ func (tq *TableQueue) Access(element *list.Element) {
 type tblInfo struct {
 	table   *Table
 	element *list.Element
-	mtx     sync.Mutex
+	done    chan bool
 }
 
 // Manage cache of tables.
@@ -62,7 +62,7 @@ func (tc *TableCache) Add(table *Table, id int64) {
 	}
 
 	oldId, element := tc.queue.Add(id)
-	tc.tableMap[id] = tblInfo{table: table, element: element}
+	tc.tableMap[id] = tblInfo{table: table, element: element, done: make(chan bool)}
 	if oldId >= 0 {
 		delete(tc.tableMap, oldId)
 	}
@@ -70,18 +70,25 @@ func (tc *TableCache) Add(table *Table, id int64) {
 
 func (tc *TableCache) Get(id int64) *Table {
 	tc.mutex.Lock()
-	// Find if the table is already in cache
+
+	// Find if the table is already in cache.
 	info, found := tc.tableMap[id]
-	if found {
+	if found && info.table != nil {
 		tc.queue.Access(info.element)
 		tc.mutex.Unlock()
 		return info.table
 	}
 
-	// Put a place holder.
-	info = tblInfo{}
-	info.mtx.Lock()
-	tc.tableMap[id] = info
+	// Someone else is trying to load the table, so let's wait.
+	if found && info.table == nil {
+		tc.mutex.Unlock()
+		<-info.done
+		return tc.Get(id)
+	}
+
+	// Cache item cannot be found, put a place holder so that
+	// other go routine that uses it can wait.
+	tc.tableMap[id] = tblInfo{done: make(chan bool)}
 	tc.mutex.Unlock()
 
 	return nil
