@@ -42,12 +42,14 @@ type TableCache struct {
 	mutex    sync.Mutex
 	tableMap map[int64]tblInfo
 	queue    TableQueue
+	impl     *DbImpl
 }
 
-func MakeTableCache(capacity int) *TableCache {
+func MakeTableCache(impl *DbImpl, capacity int) *TableCache {
 	return &TableCache{
 		tableMap: map[int64]tblInfo{},
 		queue:    TableQueue{capacity: capacity},
+		impl:     impl,
 	}
 }
 
@@ -91,7 +93,53 @@ func (tc *TableCache) Get(id int64) *Table {
 	tc.tableMap[id] = tblInfo{done: make(chan bool)}
 	tc.mutex.Unlock()
 
-	return nil
+	finfo, found := tc.impl.GetManifest().GetFileInfo(id)
+	if !found {
+		panic("Expected id does not found")
+	}
+
+	file, status := tc.impl.GetEnv().NewSequentialFile(finfo.Location)
+	if !status.Ok() {
+		panic("File does not exist!")
+	}
+
+	var fsize uint64
+	fsize, status = tc.impl.GetEnv().GetFileSize(finfo.Location)
+	if !status.Ok() {
+		panic("Cannot stat a file!")
+	}
+
+	buf := make([]byte, fsize)
+	tbl := RecoverTable(file, buf, tc.impl.GetComparator())
+
+	if tbl == nil {
+		panic("Fails to recover a table!")
+	}
+
+	// Add the table into cache.
+	tc.mutex.Lock()
+	defer tc.mutex.Unlock()
+
+	info, found = tc.tableMap[id]
+	if !found {
+		panic("Fails to find previously reserved entry!")
+	}
+
+	oldId, element := tc.queue.Add(id)
+
+	info.table = tbl
+	info.element = element
+
+	tc.tableMap[id] = info
+
+	// Notify all pending go routines that this table is loaded.
+	close(info.done)
+
+	if oldId >= 0 {
+		delete(tc.tableMap, oldId)
+	}
+
+	return tbl
 }
 
 type DbImpl struct {
@@ -100,6 +148,7 @@ type DbImpl struct {
 	comp     Comparator
 	skipList *Skiplist
 	tmpList  *Skiplist
+	manifest *Manifest
 	mutex    sync.RWMutex
 }
 
@@ -129,4 +178,8 @@ func (db *DbImpl) GetEnv() Env {
 
 func (db *DbImpl) GetComparator() Comparator {
 	return db.comp
+}
+
+func (db *DbImpl) GetManifest() *Manifest {
+	return db.manifest
 }
