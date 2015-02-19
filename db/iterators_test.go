@@ -206,3 +206,57 @@ func TestHeapIteratorHideLevels(t *testing.T) {
 		t.Error("expectation does not meet", string(it.Value()))
 	}
 }
+
+func TestConcatenationIteratorMove(t *testing.T) {
+	l0 := &SliceIterator{vals: []string{"abc", "hello"}}
+	l1 := &SliceIterator{vals: []string{"play", "quick"}}
+	l2 := &SliceIterator{vals: []string{"zero"}}
+
+	iter := &ConcatenationIterator{iters: []Iterator{l0, l1, l2}}
+	iter.SeekToFirst()
+
+	expection := []string{"abc", "hello", "play", "quick", "zero"}
+	for _, val := range expection {
+		if !iter.Valid() {
+			t.Error("Expect more entries!")
+		}
+		if string(iter.Key()) != val {
+			t.Error("Wrong key found!", string(iter.Key()), " expect ", val)
+		}
+		iter.Next()
+	}
+
+	if iter.Valid() {
+		t.Error("Expect to be end at this point!")
+	}
+
+	iter.SeekToLast()
+	for i := len(expection) - 1; i >= 0; i-- {
+		val := expection[i]
+		if !iter.Valid() {
+			t.Error("Expect more entries!")
+		}
+		if string(iter.Key()) != val {
+			t.Error("Wrong key found!")
+		}
+		iter.Prev()
+	}
+}
+
+func TestConcatenationIteratorSeek(t *testing.T) {
+	l0 := &SliceIterator{vals: []string{"abc", "hello"}}
+	l1 := &SliceIterator{vals: []string{"play", "quick"}}
+	l2 := &SliceIterator{vals: []string{"zero"}}
+
+	iter := &ConcatenationIterator{iters: []Iterator{l0, l1, l2}}
+
+	iter.Seek([]byte("play"))
+	if !iter.Valid() || string(iter.Key()) != "play" {
+		t.Error("Did not find the key!")
+	}
+
+	iter.Seek([]byte("somthing"))
+	if !iter.Valid() || string(iter.Key()) != "zero" {
+		t.Error("Did not find the key!")
+	}
+}

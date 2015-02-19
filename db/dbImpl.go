@@ -149,6 +149,7 @@ type DbImpl struct {
 	skipList *Skiplist
 	tmpList  *Skiplist
 	manifest *Manifest
+	tblCache *TableCache
 	mutex    sync.RWMutex
 }
 
@@ -182,4 +183,8 @@ func (db *DbImpl) GetComparator() Comparator {
 
 func (db *DbImpl) GetManifest() *Manifest {
 	return db.manifest
+}
+
+func (db *DbImpl) GetTableCache() *TableCache {
+	return db.tblCache
 }

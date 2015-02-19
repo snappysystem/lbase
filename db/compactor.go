@@ -133,6 +133,9 @@ func (c *Compactor) MergeCompaction() {
 		}
 	}
 
+	// If we already have some Ln level tables, find overlap range.
+	if len(sinfo) > c.maxL0Levels {
+
 	fileNumber := c.manifest.CreateFile(false)
 	finfo := FileInfo{
 		Location: path.Join(c.impl.GetPath(), MakeManifestName(fileNumber)),

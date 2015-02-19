@@ -228,3 +228,95 @@ func (hi *HeapIterator) Key() []byte {
 func (hi *HeapIterator) Value() []byte {
 	return hi.iters[0].iter.Value()
 }
+
+// Concatenation iterator iterates the key ranges of underlying iterators.
+// The underlying iterators must have non-overlaping range, and must
+// be sorted in ascending order already.
+type ConcatenationIterator struct {
+	iters []Iterator
+	idx   int
+}
+
+func (it *ConcatenationIterator) Valid() bool {
+	if it.idx < 0 || it.idx >= len(it.iters) {
+		return false
+	} else {
+		return it.iters[it.idx].Valid()
+	}
+}
+
+func (it *ConcatenationIterator) SeekToFirst() {
+	it.idx = 0
+	for it.idx < len(it.iters) {
+		it.iters[it.idx].SeekToFirst()
+		if it.iters[it.idx].Valid() {
+			return
+		}
+
+		it.idx++
+	}
+}
+
+func (it *ConcatenationIterator) SeekToLast() {
+	it.idx = len(it.iters) - 1
+	for it.idx >= 0 {
+		it.iters[it.idx].SeekToLast()
+		if it.iters[it.idx].Valid() {
+			return
+		}
+
+		it.idx--
+	}
+}
+
+func (it *ConcatenationIterator) Seek(key []byte) {
+	it.idx = 0
+	for it.idx < len(it.iters) {
+		it.iters[it.idx].Seek(key)
+		if it.iters[it.idx].Valid() {
+			return
+		}
+
+		it.idx++
+	}
+}
+
+func (it *ConcatenationIterator) Next() {
+	it.iters[it.idx].Next()
+	for {
+		if it.iters[it.idx].Valid() {
+			return
+		}
+
+		it.idx++
+		if it.idx >= len(it.iters) {
+			break
+		}
+
+		it.iters[it.idx].SeekToFirst()
+	}
+}
+
+func (it *ConcatenationIterator) Prev() {
+	it.iters[it.idx].Prev()
+	for {
+		if it.iters[it.idx].Valid() {
+			return
+		}
+
+		it.idx--
+		if it.idx < 0 {
+			break
+		}
+
+		it.iters[it.idx].SeekToLast()
+	}
+}
+
+func (it *ConcatenationIterator) Key() []byte {
+	return it.iters[it.idx].Key()
+}
+
+func (it *ConcatenationIterator) Value() []byte {
+	return it.iters[it.idx].Value()
+}
