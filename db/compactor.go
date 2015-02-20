@@ -121,20 +121,70 @@ func (c *Compactor) MergeCompaction() {
 	skipIter := oldList.NewIterator(&ReadOptions{})
 	skipIter.SeekToFirst()
 
-	iterList := make([]Iterator, 0, c.maxL0Levels)
+	l0List := make([]Iterator, 0, c.maxL0Levels)
 
 	if skipIter.Valid() {
-		iterList = append(iterList, skipIter)
+		l0List = append(l0List, skipIter)
 	}
 
 	for idx,infos := range sinfo {
 		if idx >= c.maxL0Levels {
 			break;
 		}
+
+		if len(infos) == 0 {
+			continue
+		}
+
+		tid := infos[0].id
+		tbl := c.GetTableCache().Get(tid)
+		if tbl == nil {
+			panic("Expected table is not found")
+		}
+
+		iter := tbl.NewIterator()
+		iter.SeekToFirst()
+
+		l0List = append(l0List, iter)
 	}
 
+	l0Iter := MakeHeapIterator(l0List, c.impl.GetComparator())
+
 	// If we already have some Ln level tables, find overlap range.
+	concatList := make([]Iterator, 0)
 	if len(sinfo) > c.maxL0Levels {
+		l0Iter.SeekToFirst()
+		if !l0Iter.Valid() {
+			panic("L0 tables should not be empty by now!")
+		}
+
+		beg := l0Iter.Key()
+
+		l0Iter.SeekToLast()
+		end := l0Iter.Key()
+
+		ln := sinfo[c.maxL0Levels]
+		rangeStart := sort.Search(len(ln), func(i int) bool { return ln[i].beg >= beg })
+		if rangeStart < len(ln) {
+			if rangeStart > 0 && ln[rangeStart].beg > beg && ln[rangeStart-1].end >= beg {
+				rangeStart--
+			}
+		}
+
+		rangeEnd := sort.Search(len(ln) func(i int) bool { return ln[i].end >= end })
+		if rangeEnd == len(ln) {
+			rangeEnd--
+		}
+
+		for i := rangeStart; i <= rangeEnd; i++ {
+			id := ln[i].id
+			tbl := c.impl.GetTableCache().Get(id)
+			concatList = append(concatList, tbl.NewIterator())
+		}
+	}
+
+	concatIter := &ConcatenationIterator{iters: concatList}
+	concatIter.SeekToFirst()
 
 	fileNumber := c.manifest.CreateFile(false)
 	finfo := FileInfo{
