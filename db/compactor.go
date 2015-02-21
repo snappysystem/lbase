@@ -72,7 +72,7 @@ func (c *Compactor) L0Compaction() {
 		panic("Fails to create a new sst file!")
 	}
 
-	builder := MakeTableBuilder(fh)
+	builder := MakeTableBuilder(fh, 2*int(c.minTableSize))
 
 	for ; iter.Valid(); iter.Next() {
 		builder.Add(iter.Key(), iter.Value())
@@ -229,7 +229,7 @@ func (c *Compactor) MergeCompaction() {
 			panic("Fails to create a new sst file!")
 		}
 
-		builder := MakeTableBuilder(fh)
+		builder := MakeTableBuilder(fh, 2*int(c.minTableSize))
 		size := int64(0)
 
 		for ; iter.Valid() && size < c.minTableSize; iter.Next() {
@@ -438,7 +438,7 @@ func (c *Compactor) LnCompaction(level int) {
 			panic("Fails to create a new sst file!")
 		}
 
-		builder := MakeTableBuilder(fh)
+		builder := MakeTableBuilder(fh, 2*int(c.minTableSize))
 		size := int64(0)
 
 		for ; iter.Valid() && size < c.minTableSize; iter.Next() {

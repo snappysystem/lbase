@@ -21,14 +21,12 @@ func TestBuildTableAndIterate(t *testing.T) {
 		t.Error("Fails to create a new file")
 	}
 
-	b := MakeTableBuilder(f)
+	b := MakeTableBuilder(f, 2*1024*1024)
 
 	// build a table
 	for i := 10000; i < 10256; i++ {
 		key := []byte(fmt.Sprintf("%d", i))
-		if !b.Add(key, key) {
-			t.Error("Fails to add an entry")
-		}
+		b.Add(key, key)
 	}
 
 	order := ByteOrder(0)
@@ -83,7 +81,7 @@ func TestBuildTableAndRecover(t *testing.T) {
 			t.Error("Fails to create a new file")
 		}
 
-		b := MakeTableBuilder(f)
+		b := MakeTableBuilder(f, 2*1024*1024)
 
 		// build a table
 		for i := 10000; i < 10256; i++ {

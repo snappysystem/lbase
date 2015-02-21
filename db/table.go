@@ -23,8 +23,6 @@ const (
 	// a table will have 20K entries and we will have 40 entries
 	// in index block
 	kNumLeafEntriesPerIndexEntry = 512
-	// how big a table should be, default to 2MB
-	kTableSizeHint = 2 * 1024 * 1024
 )
 
 // Differentiate encoding: given previous and current key,
@@ -154,6 +152,7 @@ func (it *DifferentialDecodingIter) Key() []byte {
 // Struct used to build a table. A table is an immutable construct.
 // Once it is build, no changes should be applied to it later.
 type TableBuilder struct {
+	sizeHint     int
 	leafData     []byte
 	indexData    []byte
 	leafNumber   uint32
@@ -168,11 +167,12 @@ type TableBuilder struct {
 }
 
 // Create a new table builder.
-func MakeTableBuilder(f WritableFile) *TableBuilder {
-	data1 := make([]byte, kTableSizeHint)
-	data2 := make([]byte, kTableSizeHint)
+func MakeTableBuilder(f WritableFile, sizeHint int) *TableBuilder {
+	data1 := make([]byte, sizeHint)
+	data2 := make([]byte, sizeHint)
 
 	return &TableBuilder{
+		sizeHint:     sizeHint,
 		leafData:     data1,
 		indexData:    data2,
 		file:         f,
@@ -181,13 +181,14 @@ func MakeTableBuilder(f WritableFile) *TableBuilder {
 	}
 }
 
-// Add a new entry to the table to be built. If the entry is added, return true.
-// If the table does not have enough space, return false.
-func (a *TableBuilder) Add(key, value []byte) bool {
-	// estimate if the table has enough space to hold the new entry
+// Add a new entry to the table to be built.
+func (a *TableBuilder) Add(key, value []byte) {
+	// Each table has an upper limit on storage capacity that is determined
+	// by @sizeHint. Caller should make sure that a table never exceed
+	// this limit.
 	estimate := len(key) + len(value)
-	if estimate+int(a.leafPos)+64 > kTableSizeHint {
-		return false
+	if estimate+int(a.leafPos)+64 > a.sizeHint {
+		panic("Too many payload in a table!")
 	}
 
 	a.numEntries++
@@ -221,8 +222,6 @@ func (a *TableBuilder) Add(key, value []byte) bool {
 			a.leafNumber = 0
 		}
 	}
-
-	return true
 }
 
 func (a *TableBuilder) Finalize(c Comparator) *Table {
