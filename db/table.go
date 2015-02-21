@@ -109,6 +109,10 @@ func (it *DifferentialDecodingIter) Prev() {
 	it.prevKey = nil
 }
 
+func (it *DifferentialDecodingIter) Close() {
+	it.blockIter.Close()
+}
+
 func (it *DifferentialDecodingIter) Key() []byte {
 	for true {
 		if it.prevKey != nil {
@@ -423,4 +427,9 @@ func (it *TableIter) Key() []byte {
 
 func (it *TableIter) Value() []byte {
 	return it.leafIter.Value()
+}
+
+func (it *TableIter) Close() {
+	it.indexIter.Close()
+	it.leafIter.Close()
 }

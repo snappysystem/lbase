@@ -44,6 +44,9 @@ func (it *SliceIterator) Value() []byte {
 	return []byte(it.name)
 }
 
+func (it *SliceIterator) Close() {
+}
+
 func TestHeapIteratorForward(t *testing.T) {
 	l0 := &SliceIterator{vals: []string{"hello", "test"}, idx: 0}
 	l1 := &SliceIterator{vals: []string{"abc", "sample"}, idx: 0}

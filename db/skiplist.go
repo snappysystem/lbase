@@ -414,3 +414,6 @@ func (a *skiplistIter) Value() []byte {
 	leaf := a.cur.(*skiplistLeafNode)
 	return leaf.value
 }
+
+func (a *skiplistIter) Close() {
+}

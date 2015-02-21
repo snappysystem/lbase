@@ -14,6 +14,7 @@ type Iterator interface {
 	Prev()
 	Key() []byte
 	Value() []byte
+	Close()
 }
 
 // compare two binaries, return -1 if a is less than b, 0 if a is the same

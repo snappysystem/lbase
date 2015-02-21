@@ -229,6 +229,12 @@ func (hi *HeapIterator) Value() []byte {
 	return hi.iters[0].iter.Value()
 }
 
+func (hi *HeapIterator) Close() {
+	for _, val := range hi.fullSet {
+		val.Close()
+	}
+}
+
 // Concatenation iterator iterates the key ranges of underlying iterators.
 // The underlying iterators must have non-overlaping range, and must
 // be sorted in ascending order already.
@@ -319,4 +325,10 @@ func (it *ConcatenationIterator) Key() []byte {
 
 func (it *ConcatenationIterator) Value() []byte {
 	return it.iters[it.idx].Value()
+}
+
+func (it *ConcatenationIterator) Close() {
+	for _, val := range it.iters {
+		val.Close()
+	}
 }

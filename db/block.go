@@ -188,6 +188,9 @@ func (a *blockIter) Value() []byte {
 	return val
 }
 
+func (a *blockIter) Close() {
+}
+
 // create a new BlockBuilder and initialize it
 // pass the slice that is going to be used to build the block
 func MakeBlockBuilder(data []byte) *BlockBuilder {
