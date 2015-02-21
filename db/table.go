@@ -258,6 +258,11 @@ func (a *TableBuilder) Finalize(c Comparator) *Table {
 	return ret
 }
 
+// Abort building the table, close opened file descriptors.
+func (a *TableBuilder) Abort() {
+	a.file.Close()
+}
+
 type Table struct {
 	index      *Block
 	leafData   []byte
