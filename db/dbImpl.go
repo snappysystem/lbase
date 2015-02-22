@@ -167,7 +167,7 @@ func (db *DbImpl) Delete(opt WriteOptions, key []byte) Status {
 }
 
 func (db *DbImpl) Write(opt WriteOptions, updates WriteBatch) Status {
-	return MakeStatusNotFound("Method not implemented yet")
+	return MakeStatusNotFound(NOT_IMPLEMENTED)
 }
 
 func (db *DbImpl) Get(opt ReadOptions, key []byte) ([]byte, Status) {
@@ -178,7 +178,7 @@ func (db *DbImpl) Get(opt ReadOptions, key []byte) ([]byte, Status) {
 	if iter.Valid() && db.comp.Compare(iter.Key(), key) == 0 {
 		return iter.Value(), MakeStatusOk()
 	} else {
-		return nil, MakeStatusNotFound("Key not found")
+		return nil, MakeStatusNotFound(KEY_NOT_FOUND)
 	}
 }
 
@@ -222,12 +222,23 @@ func (db *DbImpl) NewIterator(opt ReadOptions) Iterator {
 	return MakeHeapIterator(iterList, db.comp)
 }
 
-/*
-	GetSnapshot() Snapshot
-	ReleaseSnapshot(snap Snapshot)
-	GetApproximateSizes(ranges []Range) []uint64
-	CompactRange(start, limit []byte)
-*/
+func (db *DbImpl) GetSnapshot() Snapshot {
+	panic(NOT_IMPLEMENTED)
+	return 0
+}
+
+func (db *DbImpl) ReleaseSnapshot(snap Snapshot) {
+	panic(NOT_IMPLEMENTED)
+}
+
+func (db *DbImpl) GetApproximateSizes(ranges []Range) []uint64 {
+	panic(NOT_IMPLEMENTED)
+	return nil
+}
+
+func (db *DbImpl) CompactRange(start, limit []byte) {
+	panic(NOT_IMPLEMENTED)
+}
 
 // Freeze current skiplist, push it down to tmpList, create a new skiplist
 func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {

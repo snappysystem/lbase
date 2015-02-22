@@ -23,6 +23,12 @@ type Comparator interface {
 	Compare(a []byte, b []byte) int
 }
 
+// Types of error messages
+const (
+	KEY_NOT_FOUND   = "Key not found"
+	NOT_IMPLEMENTED = "Not implemented"
+)
+
 // A structure that carry's the result of an operation
 type Status struct {
 	ok, notFound, corruption, ioError bool
