@@ -31,10 +31,7 @@ func TestSkiplistPutGetSome(t *testing.T) {
 
 	for _, s := range data {
 		arr := []byte(s)
-		_, ok := slist.Put(arr, arr)
-		if !ok {
-			t.Error("Fails to put ", s)
-		}
+		slist.Put(arr, arr)
 	}
 
 	for _, s := range data {
@@ -54,6 +51,17 @@ func genRandomBytes() []byte {
 	}
 
 	return ret
+}
+
+func TestOverridePreviousPut(t *testing.T) {
+	slist := MakeSkiplist()
+	slist.Put([]byte("hello"), []byte("world"))
+	slist.Put([]byte("hello"), []byte("one"))
+
+	val, ok := slist.Get([]byte("hello"))
+	if !ok || string(val) != "one" {
+		t.Error("Fails to find correct value")
+	}
 }
 
 func TestSkiplistPutGetMore(t *testing.T) {

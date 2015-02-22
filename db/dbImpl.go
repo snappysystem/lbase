@@ -142,6 +142,7 @@ func (tc *TableCache) Get(id int64) *Table {
 	return tbl
 }
 
+// The real DB type.
 type DbImpl struct {
 	path     string
 	env      Env

@@ -165,14 +165,12 @@ func MakeSkiplist(args ...interface{}) *Skiplist {
 	return &ret
 }
 
-// insert a key value pair into skip list. If the key is already
-// in the list, the entry will not be updated. The orginal value
-// of the key will be returned
-func (a *Skiplist) Put(key []byte, val []byte) (old []byte, ok bool) {
+// Insert a key value pair into skip list.
+func (a *Skiplist) Put(key []byte, val []byte) {
 	prevList, found := a.trace(key)
 	if found {
 		leaf := prevList[0].(*skiplistLeafNode)
-		ok, old = false, leaf.value
+		leaf.value = val
 		return
 	}
 
@@ -203,9 +201,6 @@ func (a *Skiplist) Put(key []byte, val []byte) (old []byte, ok bool) {
 
 		child = newNode
 	}
-
-	ok = true
-	return
 }
 
 // Look up a key in the skiplist. Return the corresponding value and true
