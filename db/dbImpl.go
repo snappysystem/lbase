@@ -1,7 +1,10 @@
 package db
 
 import (
+	"bytes"
 	"container/list"
+	"encoding/gob"
+	"path"
 	"sync"
 )
 
@@ -147,6 +150,7 @@ type DbImpl struct {
 	path      string
 	env       Env
 	comp      Comparator
+	writer    *LogWriter
 	skipList  *Skiplist
 	tmpList   *Skiplist
 	manifest  *Manifest
@@ -155,11 +159,23 @@ type DbImpl struct {
 	mutex     sync.RWMutex
 }
 
+// Create a brand new Db.
+func MakeDefaultDb(path string, env Env, com Comparator) *DbImpl {
+	return nil
+}
+
 func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	enc.Encode(key)
+	enc.Encode(value)
+
 	db.mutex.Lock()
 	db.skipList.Put(key, value)
+	status := db.writer.AddRecord(buf.Bytes())
 	db.mutex.Unlock()
-	return MakeStatusOk()
+
+	return status
 }
 
 func (db *DbImpl) Delete(opt WriteOptions, key []byte) Status {
@@ -242,6 +258,15 @@ func (db *DbImpl) CompactRange(start, limit []byte) {
 
 // Freeze current skiplist, push it down to tmpList, create a new skiplist
 func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
+	// Create a new log file.
+	newLogFileNumber := db.manifest.CreateFile(false)
+	logBaseName := GetLogName(newLogFileNumber)
+	newLogPath := path.Join(db.path, logBaseName)
+	writer := MakeLogWriter(db.env, newLogPath)
+	if writer == nil {
+		panic("Fails to create a new log file")
+	}
+
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -249,6 +274,7 @@ func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
 		panic("tmpList is not empty during rotation!")
 	}
 
+	db.writer = writer
 	db.tmpList = db.skipList
 	db.skipList = MakeSkiplist()
 
