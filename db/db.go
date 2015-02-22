@@ -125,7 +125,7 @@ type DB interface {
 	Put(opt WriteOptions, key, value []byte) Status
 	Delete(opt WriteOptions, key []byte) Status
 	Write(opt WriteOptions, updates WriteBatch) Status
-	Get(opt ReadOptions, key, value []byte) Status
+	Get(opt ReadOptions, key []byte) ([]byte, Status)
 	NewIterator(opt ReadOptions) Iterator
 	GetSnapshot() Snapshot
 	ReleaseSnapshot(snap Snapshot)

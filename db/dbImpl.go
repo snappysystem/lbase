@@ -144,15 +144,90 @@ func (tc *TableCache) Get(id int64) *Table {
 
 // The real DB type.
 type DbImpl struct {
-	path     string
-	env      Env
-	comp     Comparator
-	skipList *Skiplist
-	tmpList  *Skiplist
-	manifest *Manifest
-	tblCache *TableCache
-	mutex    sync.RWMutex
+	path      string
+	env       Env
+	comp      Comparator
+	skipList  *Skiplist
+	tmpList   *Skiplist
+	manifest  *Manifest
+	tblCache  *TableCache
+	compactor *Compactor
+	mutex     sync.RWMutex
 }
+
+func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
+	db.mutex.Lock()
+	db.skipList.Put(key, value)
+	db.mutex.Unlock()
+	return MakeStatusOk()
+}
+
+func (db *DbImpl) Delete(opt WriteOptions, key []byte) Status {
+	return db.Put(opt, key, []byte(""))
+}
+
+func (db *DbImpl) Write(opt WriteOptions, updates WriteBatch) Status {
+	return MakeStatusNotFound("Method not implemented yet")
+}
+
+func (db *DbImpl) Get(opt ReadOptions, key []byte) ([]byte, Status) {
+	iter := db.NewIterator(opt)
+	iter.Seek(key)
+	defer iter.Close()
+
+	if iter.Valid() && db.comp.Compare(iter.Key(), key) == 0 {
+		return iter.Value(), MakeStatusOk()
+	} else {
+		return nil, MakeStatusNotFound("Key not found")
+	}
+}
+
+func (db *DbImpl) NewIterator(opt ReadOptions) Iterator {
+	iterList := make([]Iterator, 0)
+
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	iterList = append(iterList, db.skipList.NewIterator(&opt))
+
+	if db.tmpList != nil {
+		iterList = append(iterList, db.tmpList.NewIterator(&opt))
+	}
+
+	sId := db.manifest.GetCurrentSnapshot()
+	sinfo := db.manifest.GetSnapshotInfo(sId)
+
+	// Add iterators from L0 tables.
+	for idx, infos := range sinfo {
+		if idx >= db.compactor.maxL0Levels {
+			break
+		}
+
+		tid := infos[0].id
+		tbl := db.GetTableCache().Get(tid)
+		if tbl == nil {
+			panic("Expected table is not found")
+		}
+
+		iter := tbl.NewIterator()
+		iterList = append(iterList, iter)
+	}
+
+	// Add iterators from Ln tables.
+	for i := db.compactor.maxL0Levels; i < len(sinfo); i++ {
+		iter := MakeBinarySearchIterator(db, sinfo[i])
+		iterList = append(iterList, iter)
+	}
+
+	return MakeHeapIterator(iterList, db.comp)
+}
+
+/*
+	GetSnapshot() Snapshot
+	ReleaseSnapshot(snap Snapshot)
+	GetApproximateSizes(ranges []Range) []uint64
+	CompactRange(start, limit []byte)
+*/
 
 // Freeze current skiplist, push it down to tmpList, create a new skiplist
 func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {

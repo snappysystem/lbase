@@ -2,6 +2,7 @@ package db
 
 import (
 	"container/heap"
+	"sort"
 )
 
 // HeapIterator composite a slice of iterators into a single one.
@@ -330,5 +331,40 @@ func (it *ConcatenationIterator) Value() []byte {
 func (it *ConcatenationIterator) Close() {
 	for _, val := range it.iters {
 		val.Close()
+	}
+}
+
+// Like ConcatenationIterator, but use binary search to find the sub iterator
+// for method Search().
+type BinarySearchIterator struct {
+	ConcatenationIterator
+	infos []FileInfoEx
+	comp  Comparator
+}
+
+func MakeBinarySearchIterator(impl *DbImpl, infos []FileInfoEx) Iterator {
+	concatList := make([]Iterator, 0)
+	for _, val := range infos {
+		id := val.id
+		tbl := impl.GetTableCache().Get(id)
+		concatList = append(concatList, tbl.NewIterator())
+	}
+
+	return &BinarySearchIterator{
+		ConcatenationIterator: ConcatenationIterator{
+			iters: concatList,
+		},
+		infos: infos,
+		comp:  impl.comp,
+	}
+}
+
+func (it *BinarySearchIterator) Seek(key []byte) {
+	it.idx = sort.Search(len(it.iters), func(i int) bool {
+		return it.comp.Compare(it.infos[i].EndKey, key) >= 0
+	})
+
+	if it.idx >= 0 && it.idx < len(it.iters) {
+		it.iters[it.idx].Seek(key)
 	}
 }
