@@ -24,6 +24,7 @@ const (
 	ManifestMakeSnapshot
 	ManifestDeleteSnapshot
 	ManifestResetLog
+	ManifestNewLog
 )
 
 // In-memory representation of each nsst file.
@@ -58,6 +59,8 @@ type ManifestData struct {
 	SnapshotMap  map[int64]SnapshotInfo
 	NextSnapshot int64
 	LogName      string
+	// Current log file number.
+	LogNumber int64
 }
 
 type Manifest struct {
@@ -202,6 +205,15 @@ func recoverSingleManifest(e Env, fullPath string) *Manifest {
 			}
 
 			ret.NewSnapshot(&req, true)
+
+		case ManifestNewLog:
+			var logNumber int64
+			err = dec.Decode(&logNumber)
+			if err != nil {
+				return nil
+			}
+
+			ret.NewLog(logNumber, true)
 
 		case ManifestMakeSnapshot:
 			ret.MakeSnapshot(true)
@@ -356,6 +368,22 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 	}
 
 	return ret
+}
+
+// Remember a new log number. This happens after a skiplist rotation.
+func (m *Manifest) NewLog(logfileNumber int64, replay bool) {
+	m.rwMutex.Lock()
+	defer m.rwMutex.Unlock()
+
+	m.LogNumber = logfileNumber
+
+	if !replay {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		enc.Encode(ManifestNewLog)
+		enc.Encode(logfileNumber)
+		m.writer.AddRecord(buf.Bytes())
+	}
 }
 
 // Add reference to the latest snapshot. This is usually used by an iterator
