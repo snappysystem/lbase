@@ -112,6 +112,13 @@ func (c *Compactor) L0Compaction() {
 	}
 
 	c.manifest.NewSnapshot(&newReq, false)
+
+	// Save the new log number, remove old log.
+	oldNumber := c.manifest.LogNumber
+	logNumber := ParseLogName(path.Base(c.impl.writer.file.Name()))
+	c.manifest.NewLog(logNumber, false)
+	oldPath := path.Join(c.impl.path, GetLogName(oldNumber))
+	c.impl.env.DeleteFile(oldPath)
 }
 
 // Merge all L0 tables and some of Ln tables.

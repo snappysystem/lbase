@@ -164,6 +164,7 @@ type WritableFile interface {
 	Size() int64
 	Close() Status
 	Flush() Status
+	Name() string
 }
 
 type ByteOrder int

@@ -46,6 +46,7 @@ func (a *localSequentialFile) Close() {
 
 // A native file api wrapper.
 type localWritableFile struct {
+	name string
 	file *os.File
 	pos  int64
 }
@@ -61,7 +62,7 @@ func MakeLocalWritableFile(name string) WritableFile {
 		return nil
 	}
 
-	return &localWritableFile{f, off}
+	return &localWritableFile{name, f, off}
 }
 
 func (a *localWritableFile) Append(data []byte) Status {
@@ -94,6 +95,10 @@ func (a *localWritableFile) Flush() Status {
 	} else {
 		return MakeStatusOk()
 	}
+}
+
+func (a *localWritableFile) Name() string {
+	return a.name
 }
 
 // A native file api wrapper.
