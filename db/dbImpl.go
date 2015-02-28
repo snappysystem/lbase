@@ -62,8 +62,11 @@ type TableCache struct {
 func MakeTableCache(impl *DbImpl, capacity int) *TableCache {
 	return &TableCache{
 		tableMap: map[int64]tblInfo{},
-		queue:    TableQueue{capacity: capacity},
-		impl:     impl,
+		queue: TableQueue{
+			list:     list.New(),
+			capacity: capacity,
+		},
+		impl: impl,
 	}
 }
 
@@ -158,16 +161,17 @@ func (tc *TableCache) Get(id int64) *Table {
 
 // The real DB type.
 type DbImpl struct {
-	path      string
-	env       Env
-	comp      Comparator
-	writer    *LogWriter
-	skipList  *Skiplist
-	tmpList   *Skiplist
-	manifest  *Manifest
-	tblCache  *TableCache
-	compactor *Compactor
-	mutex     sync.RWMutex
+	path       string
+	env        Env
+	comp       Comparator
+	writer     *LogWriter
+	skipList   *Skiplist
+	tmpList    *Skiplist
+	manifest   *Manifest
+	tblCache   *TableCache
+	compactor  *Compactor
+	minLogSize int64
+	mutex      sync.RWMutex
 }
 
 // Create a brand new Db.
@@ -194,12 +198,13 @@ func MakeDb(opt DbOption) *DbImpl {
 	}
 
 	ret := &DbImpl{
-		path:     opt.path,
-		env:      opt.env,
-		comp:     opt.comp,
-		writer:   writer,
-		skipList: MakeSkiplist(opt.comp),
-		manifest: manifest,
+		path:       opt.path,
+		env:        opt.env,
+		comp:       opt.comp,
+		writer:     writer,
+		skipList:   MakeSkiplist(opt.comp),
+		manifest:   manifest,
+		minLogSize: opt.minLogSize,
 	}
 
 	ret.tblCache = MakeTableCache(ret, opt.numTblCache)
@@ -208,7 +213,10 @@ func MakeDb(opt DbOption) *DbImpl {
 	return ret
 }
 
-func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
+// Update an entry and return a channel so that caller can wait for
+// the completion of a L0 compaction. If no compaction is triggered
+// for this put, return a nil channel.
+func (db *DbImpl) PutMore(opt WriteOptions, key, value []byte) (Status, chan bool) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	enc.Encode(key)
@@ -219,7 +227,20 @@ func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
 	status := db.writer.AddRecord(buf.Bytes())
 	db.mutex.Unlock()
 
-	return status
+	var rc chan bool
+
+	// Check if L0 compaction is needed.
+	logSize := db.writer.file.Size()
+	if logSize > db.minLogSize {
+		rc = db.compactor.StartL0Compaction()
+	}
+
+	return status, rc
+}
+
+func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
+	ret, _ := db.PutMore(opt, key, value)
+	return ret
 }
 
 func (db *DbImpl) Delete(opt WriteOptions, key []byte) Status {

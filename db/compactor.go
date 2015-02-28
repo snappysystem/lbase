@@ -10,38 +10,43 @@ import (
 // different levels. This implementation assumes that there is at most one
 // compaction at any time.
 type Compactor struct {
-	manifest         *Manifest
-	impl             *DbImpl
-	writer           *LogWriter
-	startCompaction  chan bool
-	finishCompaction chan bool
-	version          int64
-	minLogSize       int64
-	maxL0Levels      int
-	minTableSize     int64
-	randList         []*rand.Rand
+	manifest        *Manifest
+	impl            *DbImpl
+	writer          *LogWriter
+	startCompaction chan chan bool
+	version         int64
+	maxL0Levels     int
+	minTableSize    int64
+	randList        []*rand.Rand
 }
 
 // Create a new compactor.
 func MakeCompactor(impl *DbImpl, opt DbOption) *Compactor {
-	return &Compactor{
-		manifest:     impl.manifest,
-		impl:         impl,
-		writer:       impl.writer,
-		minLogSize:   opt.minLogSize,
-		maxL0Levels:  opt.maxL0Levels,
-		minTableSize: opt.minTableSize,
+	startCompaction := make(chan chan bool, 16)
+	ret := &Compactor{
+		manifest:        impl.manifest,
+		impl:            impl,
+		writer:          impl.writer,
+		startCompaction: startCompaction,
+		maxL0Levels:     opt.maxL0Levels,
+		minTableSize:    opt.minTableSize,
 	}
+
+	go func() {
+		for finishCompaction := range ret.startCompaction {
+			ret.L0Compaction()
+			finishCompaction <- true
+			close(finishCompaction)
+		}
+	}()
+
+	return ret
 }
 
-// This should be run continuously from a go routine to find files that need to be compacted
-func (c *Compactor) Check() {
-	// First check if a L0 compaction is warrented.
-	logSize := c.writer.file.Size()
-	if logSize > c.minLogSize {
-		go c.L0Compaction()
-		return
-	}
+func (c *Compactor) StartL0Compaction() chan bool {
+	ret := make(chan bool)
+	c.startCompaction <- ret
+	return ret
 }
 
 // Perform L0 compaction: dump skiplist into a L0 table.
@@ -91,7 +96,7 @@ func (c *Compactor) L0Compaction() {
 	}
 
 	// Get the last element
-	iter.Prev()
+	iter.SeekToLast()
 	finfo.EndKey = iter.Key()
 
 	builder.Finalize(c.impl.GetComparator())

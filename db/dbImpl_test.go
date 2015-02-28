@@ -37,6 +37,7 @@ func TestSimplePut(t *testing.T) {
 	var wopt WriteOptions
 	var ropt ReadOptions
 
+	// Test put.
 	for k, v := range data {
 		status := db.Put(wopt, []byte(k), []byte(v))
 		if !status.Ok() {
@@ -44,10 +45,34 @@ func TestSimplePut(t *testing.T) {
 		}
 	}
 
+	// Test get.
 	for k, v := range data {
 		val, status := db.Get(ropt, []byte(k))
 		if !status.Ok() || string(val) != v {
 			t.Error("Fails to get a key")
 		}
+	}
+
+	// Test iterator.
+	it := db.NewIterator(ropt)
+	it.SeekToFirst()
+
+	dcopy := make(map[string]string)
+	for k, v := range data {
+		dcopy[k] = v
+	}
+
+	for it.Valid() {
+		k := it.Key()
+		if _, found := dcopy[string(k)]; found == false {
+			t.Error("Fails to find a key ", string(k))
+		}
+
+		delete(dcopy, string(k))
+		it.Next()
+	}
+
+	if len(dcopy) > 0 {
+		t.Error("Fails to iterate all elements")
 	}
 }
