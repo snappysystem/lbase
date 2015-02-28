@@ -22,6 +22,18 @@ type Compactor struct {
 	randList         []*rand.Rand
 }
 
+// Create a new compactor.
+func MakeCompactor(impl *DbImpl, opt DbOption) *Compactor {
+	return &Compactor{
+		manifest:     impl.manifest,
+		impl:         impl,
+		writer:       impl.writer,
+		minLogSize:   opt.minLogSize,
+		maxL0Levels:  opt.maxL0Levels,
+		minTableSize: opt.minTableSize,
+	}
+}
+
 // This should be run continuously from a go routine to find files that need to be compacted
 func (c *Compactor) Check() {
 	// First check if a L0 compaction is warrented.
@@ -350,6 +362,10 @@ func (c *Compactor) LnCompaction(level int) {
 
 	if len(sinfo) < level {
 		panic("manifest does not have required level!")
+	}
+
+	for len(c.randList) <= level {
+		c.randList = append(c.randList, rand.New(rand.NewSource(0)))
 	}
 
 	// Pick a non-negative index value on level @level to be compacted.

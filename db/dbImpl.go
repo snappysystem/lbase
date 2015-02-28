@@ -8,6 +8,17 @@ import (
 	"sync"
 )
 
+// Parameters about DB.
+type DbOption struct {
+	path         string
+	env          Env
+	comp         Comparator
+	numTblCache  int
+	minLogSize   int64
+	maxL0Levels  int
+	minTableSize int64
+}
+
 // A FIFO queue for table cache.
 type TableQueue struct {
 	list     *list.List
@@ -160,8 +171,41 @@ type DbImpl struct {
 }
 
 // Create a brand new Db.
-func MakeDefaultDb(path string, env Env, com Comparator) *DbImpl {
-	return nil
+func MakeDb(opt DbOption) *DbImpl {
+	opt.env.DeleteDir(opt.path)
+	status := opt.env.CreateDir(opt.path)
+	if !status.Ok() {
+		return nil
+	}
+
+	// Create a new manifest.
+	manifest := RecoverManifest(opt.env, opt.path, true)
+	if manifest == nil {
+		return nil
+	}
+
+	// Create first log file
+	newLogFileNumber := manifest.CreateFile(false)
+	logBaseName := GetLogName(newLogFileNumber)
+	newLogPath := path.Join(opt.path, logBaseName)
+	writer := MakeLogWriter(opt.env, newLogPath)
+	if writer == nil {
+		return nil
+	}
+
+	ret := &DbImpl{
+		path:     opt.path,
+		env:      opt.env,
+		comp:     opt.comp,
+		writer:   writer,
+		skipList: MakeSkiplist(opt.comp),
+		manifest: manifest,
+	}
+
+	ret.tblCache = MakeTableCache(ret, opt.numTblCache)
+	ret.compactor = MakeCompactor(ret, opt)
+
+	return ret
 }
 
 func (db *DbImpl) Put(opt WriteOptions, key, value []byte) Status {
