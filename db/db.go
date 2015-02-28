@@ -167,6 +167,7 @@ type WritableFile interface {
 	Name() string
 }
 
+// Default comparator.
 type ByteOrder int
 
 func (x ByteOrder) Compare(a, b []byte) int {
