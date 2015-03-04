@@ -66,6 +66,103 @@ func TestBuildTableAndIterate(t *testing.T) {
 	}
 }
 
+func TestBuildTableAndMoveBackward(t *testing.T) {
+	root := "/tmp/table_test/testBuildTableAndMoveBackward"
+
+	os.RemoveAll(root)
+	os.MkdirAll(root, os.ModePerm)
+
+	// create a table builder
+	fname := strings.Join([]string{root, "sstfile.nsst"}, "/")
+	f := MakeLocalWritableFile(fname)
+	if f == nil {
+		t.Error("Fails to create a new file")
+	}
+
+	b := MakeTableBuilder(f, 2*1024*1024)
+
+	// build a table
+	for i := 10000; i < 10256; i++ {
+		key := []byte(fmt.Sprintf("%d", i*10))
+		b.Add(key, key)
+	}
+
+	order := ByteOrder(0)
+	res := b.Finalize(order)
+
+	if res == nil {
+		t.Error("Fails to get a table object")
+	}
+
+	// verify that data is correct
+	iter := res.NewIterator()
+	if iter == nil {
+		t.Error("fails to get an iterator")
+	}
+
+	iter.SeekToLast()
+	if !iter.Valid() {
+		t.Error("Last is not valid!")
+	}
+
+	for i := 10255; i >= 10000; i-- {
+		key := fmt.Sprintf("%d", i*10)
+		if !iter.Valid() || string(iter.Value()) != key {
+			t.Error("Fails to find matching value")
+		}
+		iter.Prev()
+	}
+
+	iter.Close()
+}
+
+func TestBuildTableAndSeek(t *testing.T) {
+	root := "/tmp/table_test/testBuildTableAndIterate"
+
+	os.RemoveAll(root)
+	os.MkdirAll(root, os.ModePerm)
+
+	// create a table builder
+	fname := strings.Join([]string{root, "sstfile.nsst"}, "/")
+	f := MakeLocalWritableFile(fname)
+	if f == nil {
+		t.Error("Fails to create a new file")
+	}
+
+	b := MakeTableBuilder(f, 2*1024*1024)
+
+	// build a table
+	for i := 10000; i < 10256; i++ {
+		key := []byte(fmt.Sprintf("%d", i*10))
+		b.Add(key, key)
+	}
+
+	order := ByteOrder(0)
+	res := b.Finalize(order)
+
+	if res == nil {
+		t.Error("Fails to get a table object")
+	}
+
+	// verify that data is correct
+	iter := res.NewIterator()
+	if iter == nil {
+		t.Error("fails to get an iterator")
+	}
+
+	iter.Seek([]byte("100020"))
+	if !iter.Valid() || string(iter.Key()) != "100020" {
+		t.Error("Fails to seek to exact location")
+	}
+
+	iter.Seek([]byte("100082"))
+	if !iter.Valid() || string(iter.Key()) != "100090" {
+		t.Error("Fails to seek to closest location")
+	}
+
+	iter.Close()
+}
+
 func TestBuildTableAndRecover(t *testing.T) {
 	root := "/tmp/table_test/testBuildTableAndRecover"
 

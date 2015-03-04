@@ -74,12 +74,12 @@ func (c *Compactor) L0Compaction() {
 
 	// No elements in the skiplist: nothing to do here.
 	if !iter.Valid() {
-		return
+		panic("Why there is no element?")
 	}
 
 	fileNumber := c.manifest.CreateFile(false)
 	finfo := FileInfo{
-		Location: path.Join(c.impl.GetPath(), MakeManifestName(fileNumber)),
+		Location: path.Join(c.impl.GetPath(), MakeSstName(fileNumber)),
 		BeginKey: iter.Key(),
 		Refcnt:   1,
 	}
@@ -128,7 +128,8 @@ func (c *Compactor) L0Compaction() {
 		newReq.Levels = append(newReq.Levels, tmp)
 	}
 
-	c.manifest.NewSnapshot(&newReq, false)
+	// Reset temp skiplist and commit table changes.
+	c.impl.L0CompactionDone(&newReq)
 
 	// Save the new log number, remove old log.
 	oldNumber := c.manifest.LogNumber
@@ -241,7 +242,7 @@ func (c *Compactor) MergeCompaction() {
 		fileNumber := c.manifest.CreateFile(false)
 		finfo := FileInfoEx{
 			FileInfo: FileInfo{
-				Location: path.Join(c.impl.GetPath(), MakeManifestName(fileNumber)),
+				Location: path.Join(c.impl.GetPath(), MakeSstName(fileNumber)),
 				BeginKey: iter.Key(),
 				Refcnt:   1,
 			},
@@ -454,7 +455,7 @@ func (c *Compactor) LnCompaction(level int) {
 		fileNumber := c.manifest.CreateFile(false)
 		finfo := FileInfoEx{
 			FileInfo: FileInfo{
-				Location: path.Join(c.impl.GetPath(), MakeManifestName(fileNumber)),
+				Location: path.Join(c.impl.GetPath(), MakeSstName(fileNumber)),
 				BeginKey: iter.Key(),
 				Refcnt:   1,
 			},

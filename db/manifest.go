@@ -14,6 +14,7 @@ import (
 
 const (
 	ManifestPrefix  = "manifest_"
+	SstPrefix       = "sst_"
 	kMaxRecordBytes = 1024 * 1024
 )
 
@@ -96,6 +97,10 @@ func ParseManifestName(fname string) int64 {
 
 func MakeManifestName(number int64) string {
 	return fmt.Sprintf("%s%010d", ManifestPrefix, number)
+}
+
+func MakeSstName(number int64) string {
+	return fmt.Sprintf("%s%010d", SstPrefix, number)
 }
 
 // Helper type to sort slice of int64

@@ -50,6 +50,15 @@ func TestL0Compaction(t *testing.T) {
 		}
 	}
 
+	{
+		it := db.NewIterator(ropt)
+		it.SeekToLast()
+
+		for it.Valid() {
+			it.Prev()
+		}
+	}
+
 	var val []byte
 	val, status = db.Get(ropt, []byte("hello"))
 	if !status.Ok() || string(val) != "world" {

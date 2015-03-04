@@ -173,6 +173,31 @@ func TestSkiplistScanBackwardSome(t *testing.T) {
 	}
 }
 
+func TestSkiplistSeek(t *testing.T) {
+	data := [...]string{"yellow", "world", "hello", "go"}
+	slist := MakeSkiplist()
+
+	for _, s := range data {
+		bs := []byte(s)
+		slist.Put(bs, bs)
+	}
+
+	ro := &ReadOptions{}
+	iter := slist.NewIterator(ro)
+
+	iter.Seek([]byte(data[1]))
+	if !iter.Valid() || string(iter.Key()) != data[1] {
+		t.Error("Fails to seek to exact location")
+	}
+
+	iter.Seek([]byte("gzip"))
+	if !iter.Valid() || string(iter.Key()) != "hello" {
+		t.Error("Fails to seek to closest location")
+	}
+
+	iter.Close()
+}
+
 // struct to sort a slice of byte slices
 type ByteSliceSorter struct {
 	bytesList [][]byte

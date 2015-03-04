@@ -137,7 +137,7 @@ func (a *blockIter) SeekToFirst() {
 }
 
 func (a *blockIter) SeekToLast() {
-	a.idx = int32(a.block.numKeys)
+	a.idx = int32(a.block.numKeys - 1)
 }
 
 // Find and point to the key. If key does not exist, point to the

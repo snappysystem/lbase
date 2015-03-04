@@ -73,6 +73,7 @@ func DecodeDifferentialKey(prev, current []byte) []byte {
 // key value from Key() is always a full key
 type DifferentialDecodingIter struct {
 	blockIter Iterator
+	comp      Comparator
 	prevKey   []byte
 }
 
@@ -95,8 +96,13 @@ func (it *DifferentialDecodingIter) SeekToLast() {
 }
 
 func (it *DifferentialDecodingIter) Seek(key []byte) {
-	it.blockIter.Seek(key)
-	it.prevKey = nil
+	it.SeekToFirst()
+	for it.Valid() {
+		if it.comp.Compare(key, it.Key()) <= 0 {
+			break
+		}
+		it.Next()
+	}
 }
 
 func (it *DifferentialDecodingIter) Next() {
@@ -110,7 +116,9 @@ func (it *DifferentialDecodingIter) Prev() {
 }
 
 func (it *DifferentialDecodingIter) Close() {
-	it.blockIter.Close()
+	if it.blockIter != nil {
+		it.blockIter.Close()
+	}
 }
 
 func (it *DifferentialDecodingIter) Key() []byte {
@@ -320,7 +328,7 @@ func (it *TableIter) SeekToFirst() {
 		it.leafBlock = DecodeBlock(it.table.leafData, lastOff)
 		if it.leafBlock != nil {
 			rawIt := it.leafBlock.NewIterator(it.table.comparator)
-			it.leafIter = &DifferentialDecodingIter{rawIt, nil}
+			it.leafIter = &DifferentialDecodingIter{rawIt, it.table.comparator, nil}
 			it.leafIter.SeekToFirst()
 			if it.leafIter.Valid() {
 				it.valid = true
@@ -338,7 +346,7 @@ func (it *TableIter) SeekToLast() {
 		it.leafBlock = DecodeBlock(it.table.leafData, lastOff)
 		if it.leafBlock != nil {
 			rawIter := it.leafBlock.NewIterator(it.table.comparator)
-			it.leafIter = &DifferentialDecodingIter{rawIter, nil}
+			it.leafIter = &DifferentialDecodingIter{rawIter, it.table.comparator, nil}
 			it.leafIter.SeekToLast()
 			if it.leafIter.Valid() {
 				it.valid = true
@@ -356,7 +364,7 @@ func (it *TableIter) Seek(key []byte) {
 		it.leafBlock = DecodeBlock(it.table.leafData, lastOff)
 		if it.leafBlock != nil {
 			rawIt := it.leafBlock.NewIterator(it.table.comparator)
-			it.leafIter = &DifferentialDecodingIter{rawIt, nil}
+			it.leafIter = &DifferentialDecodingIter{rawIt, it.table.comparator, nil}
 			it.leafIter.Seek(key)
 			if it.leafIter.Valid() {
 				it.valid = true
@@ -385,7 +393,7 @@ func (it *TableIter) Next() {
 
 			if it.leafBlock != nil {
 				rawIter := it.leafBlock.NewIterator(it.table.comparator)
-				it.leafIter = &DifferentialDecodingIter{rawIter, nil}
+				it.leafIter = &DifferentialDecodingIter{rawIter, it.table.comparator, nil}
 				it.leafIter.SeekToFirst()
 				if it.leafIter.Valid() {
 					it.valid = true
@@ -411,7 +419,7 @@ func (it *TableIter) Prev() {
 
 			if it.leafBlock != nil {
 				rawIter := it.leafBlock.NewIterator(it.table.comparator)
-				it.leafIter = &DifferentialDecodingIter{rawIter, nil}
+				it.leafIter = &DifferentialDecodingIter{rawIter, it.table.comparator, nil}
 				it.leafIter.SeekToLast()
 				if it.leafIter.Valid() {
 					it.valid = true
@@ -431,5 +439,7 @@ func (it *TableIter) Value() []byte {
 
 func (it *TableIter) Close() {
 	it.indexIter.Close()
-	it.leafIter.Close()
+	if it.leafIter != nil {
+		it.leafIter.Close()
+	}
 }

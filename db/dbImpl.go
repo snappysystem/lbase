@@ -171,6 +171,7 @@ type DbImpl struct {
 	tblCache   *TableCache
 	compactor  *Compactor
 	minLogSize int64
+	compacting bool
 	mutex      sync.RWMutex
 }
 
@@ -205,6 +206,7 @@ func MakeDb(opt DbOption) *DbImpl {
 		skipList:   MakeSkiplist(opt.comp),
 		manifest:   manifest,
 		minLogSize: opt.minLogSize,
+		compacting: false,
 	}
 
 	ret.tblCache = MakeTableCache(ret, opt.numTblCache)
@@ -232,7 +234,17 @@ func (db *DbImpl) PutMore(opt WriteOptions, key, value []byte) (Status, chan boo
 	// Check if L0 compaction is needed.
 	logSize := db.writer.file.Size()
 	if logSize > db.minLogSize {
-		rc = db.compactor.StartL0Compaction()
+		db.mutex.Lock()
+		allowCompaction := false
+		if !db.compacting {
+			db.compacting = true
+			allowCompaction = true
+		}
+		db.mutex.Unlock()
+
+		if allowCompaction {
+			rc = db.compactor.StartL0Compaction()
+		}
 	}
 
 	return status, rc
@@ -342,8 +354,17 @@ func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
 	db.writer = writer
 	db.tmpList = db.skipList
 	db.skipList = MakeSkiplist()
+	db.compacting = false
 
 	return db.skipList, db.tmpList
+}
+
+func (db *DbImpl) L0CompactionDone(newReq *NewSnapshotRequest) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	db.tmpList = nil
+	db.manifest.NewSnapshot(newReq, false)
 }
 
 // Get parent dir of this db.
