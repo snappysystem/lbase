@@ -349,6 +349,22 @@ func (m *Manifest) NewSnapshot(req *NewSnapshotRequest, replay bool) int64 {
 		}
 	}
 
+	// Increase refcount for other files
+	for _, flist := range req.Levels {
+		for _, fnumber := range flist {
+			// Make sure that it is not new file.
+			if _, ok := req.Files[fnumber]; !ok {
+				orig, check := m.FileMap[fnumber]
+				if !check {
+					panic("Expect file number does not exist!")
+				}
+
+				orig.Refcnt++
+				m.FileMap[fnumber] = orig
+			}
+		}
+	}
+
 	// We have a new up-to-date snapshot, remove the previous one if possible.
 	if ret > 0 {
 		val := m.SnapshotMap[ret-1]
@@ -531,7 +547,7 @@ func (m *Manifest) GetSnapshotInfo(snapshot int64) [][]FileInfoEx {
 		for _, id := range files {
 			info, found := m.FileMap[id]
 			if !found {
-				panic("Fails to find file info!")
+				panic(fmt.Sprintf("Fails to find file info %d", id))
 			}
 
 			tmp = append(tmp, FileInfoEx{

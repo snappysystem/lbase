@@ -1,12 +1,13 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
 
 func TestL0Compaction(t *testing.T) {
-	path := "/tmp/TestL0Compaction"
+	path := "/tmp/compactor_test/TestL0Compaction"
 	os.RemoveAll(path)
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
@@ -17,7 +18,7 @@ func TestL0Compaction(t *testing.T) {
 		path:         path,
 		env:          MakeNativeEnv(),
 		comp:         ByteOrder(0),
-		numTblCache:  4,
+		numTblCache:  8,
 		minLogSize:   64,
 		maxL0Levels:  4,
 		minTableSize: 4 * 1024 * 1024,
@@ -37,30 +38,24 @@ func TestL0Compaction(t *testing.T) {
 	var ropt ReadOptions
 
 	db.Put(wopt, []byte("hello"), []byte("world"))
-	status, finish := db.PutMore(wopt, []byte("second"), bigVal)
 
-	if !status.Ok() {
-		t.Error("Fails to put an item!")
-	}
+	for i := 1000; i < 1002; i++ {
+		key := fmt.Sprintf("%d", i)
+		status, finish := db.PutMore(wopt, []byte(key), bigVal)
 
-	// Confirm that L0 compaction happens.
-	for v := range finish {
-		if v != true {
-			t.Error("Does not finish compaction successfully")
+		if !status.Ok() {
+			t.Error("Fails to put an item!")
+		}
+
+		// Wait until L0 compaction completes.
+		for v := range finish {
+			if v != true {
+				t.Error("Does not finish compaction successfully")
+			}
 		}
 	}
 
-	{
-		it := db.NewIterator(ropt)
-		it.SeekToLast()
-
-		for it.Valid() {
-			it.Prev()
-		}
-	}
-
-	var val []byte
-	val, status = db.Get(ropt, []byte("hello"))
+	val, status := db.Get(ropt, []byte("hello"))
 	if !status.Ok() || string(val) != "world" {
 		t.Error("Fails to get a key")
 	}
