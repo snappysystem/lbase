@@ -55,8 +55,29 @@ func TestL0Compaction(t *testing.T) {
 		}
 	}
 
+	// Verify a particular key is present.
 	val, status := db.Get(ropt, []byte("hello"))
 	if !status.Ok() || string(val) != "world" {
 		t.Error("Fails to get a key")
+	}
+
+	// Verify that all keys are present.
+	it := db.NewIterator(ropt)
+	it.SeekToFirst()
+
+	if !it.Valid() || string(it.Key()) != "1000" {
+		t.Error("Fails to get expected key")
+	}
+
+	it.Next()
+
+	if !it.Valid() || string(it.Key()) != "1001" {
+		t.Error("Fails to get expected key")
+	}
+
+	it.Next()
+
+	if !it.Valid() || string(it.Key()) != "hello" {
+		t.Error("Fails to get expected key")
 	}
 }
