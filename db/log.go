@@ -52,6 +52,10 @@ func MakeLogWriter(e Env, fpath string) *LogWriter {
 	return &LogWriter{file: wf}
 }
 
+func (w *LogWriter) Name() string {
+	return w.file.Name()
+}
+
 func (w *LogWriter) AddRecord(record []byte) Status {
 	header := [kHeaderSize]byte{}
 

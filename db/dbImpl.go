@@ -160,18 +160,19 @@ func (tc *TableCache) Get(id int64) *Table {
 
 // The real DB type.
 type DbImpl struct {
-	path       string
-	env        Env
-	comp       Comparator
-	writer     *LogWriter
-	skipList   *Skiplist
-	tmpList    *Skiplist
-	manifest   *Manifest
-	tblCache   *TableCache
-	compactor  *Compactor
-	minLogSize int64
-	compacting bool
-	mutex      sync.RWMutex
+	path           string
+	env            Env
+	comp           Comparator
+	writer         *LogWriter
+	previousWriter *LogWriter
+	skipList       *Skiplist
+	tmpList        *Skiplist
+	manifest       *Manifest
+	tblCache       *TableCache
+	compactor      *Compactor
+	minLogSize     int64
+	compacting     bool
+	mutex          sync.RWMutex
 }
 
 // Create a brand new Db.
@@ -355,6 +356,11 @@ func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
 		panic("tmpList is not empty during rotation!")
 	}
 
+	if db.previousWriter != nil {
+		panic("Previous writer has not been cleared yet!")
+	}
+
+	db.previousWriter = db.writer
 	db.writer = writer
 	db.tmpList = db.skipList
 	db.skipList = MakeSkiplist()
@@ -365,10 +371,16 @@ func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
 
 func (db *DbImpl) CompactionDone(newReq *NewSnapshotRequest) {
 	db.mutex.Lock()
-	defer db.mutex.Unlock()
 
 	db.tmpList = nil
 	db.manifest.NewSnapshot(newReq, false)
+
+	previousWriter := db.previousWriter
+	db.previousWriter = nil
+
+	db.mutex.Unlock()
+
+	db.env.DeleteFile(previousWriter.Name())
 }
 
 // Get parent dir of this db.

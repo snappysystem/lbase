@@ -85,7 +85,7 @@ func TestL0Compaction(t *testing.T) {
 }
 
 func TestMergeCompaction(t *testing.T) {
-	path := "/tmp/compactor_test/TestL0Compaction"
+	path := "/tmp/compactor_test/TestMergeCompaction"
 	os.RemoveAll(path)
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestMergeCompaction(t *testing.T) {
 		path:         path,
 		env:          MakeNativeEnv(),
 		comp:         ByteOrder(0),
-		numTblCache:  16,
+		numTblCache:  4,
 		minLogSize:   64,
 		maxL0Levels:  4,
 		minTableSize: 4 * 1024 * 1024,
@@ -115,7 +115,7 @@ func TestMergeCompaction(t *testing.T) {
 	var wopt WriteOptions
 	var ropt ReadOptions
 
-	for i := 1000; i < 1020; i++ {
+	for i := 1000; i < 1100; i++ {
 		key := fmt.Sprintf("%d", i)
 		status, finish := db.PutMore(wopt, []byte(key), bigVal)
 
@@ -135,7 +135,7 @@ func TestMergeCompaction(t *testing.T) {
 	it := db.NewIterator(ropt)
 	it.SeekToFirst()
 
-	for i := 1000; i < 1020; i++ {
+	for i := 1000; i < 1100; i++ {
 		key := fmt.Sprintf("%d", i)
 		if !it.Valid() || string(it.Key()) != key {
 			t.Error("Fails to get expected key:", key)

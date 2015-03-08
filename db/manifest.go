@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ManifestPrefix  = "manifest_"
-	SstPrefix       = "sst_"
+	ManifestPrefix  = "manifest."
+	SstPrefix       = "sst."
 	kMaxRecordBytes = 1024 * 1024
 )
 
