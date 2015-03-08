@@ -56,14 +56,9 @@ func (c *Compactor) L0Compaction() {
 	sId := c.manifest.GetCurrentSnapshot()
 	sinfo := c.manifest.GetSnapshotInfo(sId)
 
-	if len(sinfo) > c.maxL0Levels {
-		if len(sinfo[c.maxL0Levels-1]) > 0 {
-			panic("L0 level has already full!")
-		}
-		if c.maxL0Levels > 1 && len(sinfo[c.maxL0Levels-2]) > 0 {
-			c.MergeCompaction()
-			return
-		}
+	if len(sinfo) >= c.maxL0Levels && len(sinfo[c.maxL0Levels-1]) > 0 {
+		c.MergeCompaction()
+		return
 	}
 
 	// Let us do a trivial compaction by scanning all elements in the skiplist
@@ -119,6 +114,11 @@ func (c *Compactor) L0Compaction() {
 	// Insert a new level into L0
 	newReq.Levels = append(newReq.Levels, []int64{fileNumber})
 
+	// If the corresponding L0 level already exists, skip it.
+	if idx < len(sinfo) {
+		idx++
+	}
+
 	// Copy all Ln levels over.
 	for ; idx < len(sinfo); idx++ {
 		tmp := make([]int64, 0, len(sinfo[idx]))
@@ -129,7 +129,7 @@ func (c *Compactor) L0Compaction() {
 	}
 
 	// Reset temp skiplist and commit table changes.
-	c.impl.L0CompactionDone(&newReq)
+	c.impl.CompactionDone(&newReq)
 
 	// Save the new log number, remove old log.
 	oldNumber := c.manifest.LogNumber
@@ -224,12 +224,14 @@ func (c *Compactor) MergeCompaction() {
 			concatList = append(concatList, tbl.NewIterator())
 		}
 
-		concatIter := &ConcatenationIterator{iters: concatList}
-		concatIter.SeekToFirst()
+		if len(concatList) > 0 {
+			concatIter := &ConcatenationIterator{iters: concatList}
+			concatIter.SeekToFirst()
 
-		// Update iterator with Ln tables.
-		l0List = append(l0List, iter)
-		iter = MakeHeapIterator(l0List, c.impl.GetComparator())
+			// Update iterator with Ln tables.
+			l0List = append(l0List, iter)
+			iter = MakeHeapIterator(l0List, c.impl.GetComparator())
+		}
 	}
 
 	iter.SeekToFirst()
@@ -258,21 +260,28 @@ func (c *Compactor) MergeCompaction() {
 		size := int64(0)
 
 		for ; iter.Valid() && size < c.minTableSize; iter.Next() {
-			builder.Add(iter.Key(), iter.Value())
+			key, value := iter.Key(), iter.Value()
+			builder.Add(key, value)
+			size = size + int64(len(key)) + int64(len(value))
 		}
 
 		newInfos = append(newInfos, finfo)
 
 		// If the last table is too small, it should be merged with previous
 		// table. We will handle this situation out of the for loop.
-		if !iter.Valid() && size < c.minTableSize {
+		if !iter.Valid() && size < c.minTableSize && previousBuilder != nil {
 			builder.Abort()
 			remainingBuilder = previousBuilder
 			break
 		}
 
 		// Get the last element
-		iter.Prev()
+		if iter.Valid() {
+			iter.Prev()
+		} else {
+			iter.SeekToLast()
+		}
+
 		finfo.EndKey = iter.Key()
 		iter.Next()
 
@@ -343,6 +352,12 @@ func (c *Compactor) MergeCompaction() {
 		panic("Unexpected sinfo length!")
 	}
 
+	// Remove all L0 files.
+	// (TODO) decrease refcont?
+	for i := 0; i < c.maxL0Levels; i++ {
+		sinfo[i] = sinfo[i][:0]
+	}
+
 	for _, l := range sinfo {
 		intList := make([]int64, 0)
 		for _, val := range l {
@@ -352,7 +367,8 @@ func (c *Compactor) MergeCompaction() {
 		newReq.Levels = append(newReq.Levels, intList)
 	}
 
-	c.manifest.NewSnapshot(&newReq, false)
+	// Reset temp skiplist and commit table changes.
+	c.impl.CompactionDone(&newReq)
 }
 
 // Merge tables in non-L0 levels.

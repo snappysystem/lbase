@@ -28,8 +28,7 @@ type TableQueue struct {
 // Add a new table Id into queue. Return the oldest one in the queue, or
 // -1 if there are less than @capacity elements in the queue
 func (tq *TableQueue) Add(id int64) (int64, *list.Element) {
-	element := &list.Element{Value: id}
-	tq.list.PushFront(element)
+	element := tq.list.PushFront(id)
 	if tq.list.Len() < tq.capacity {
 		return -1, element
 	} else {
@@ -296,6 +295,11 @@ func (db *DbImpl) NewIterator(opt ReadOptions) Iterator {
 			break
 		}
 
+		// Skip empty L0 layers.
+		if len(infos) == 0 {
+			continue
+		}
+
 		tid := infos[0].id
 		tbl := db.GetTableCache().Get(tid)
 		if tbl == nil {
@@ -359,7 +363,7 @@ func (db *DbImpl) RotateSkiplist() (*Skiplist, *Skiplist) {
 	return db.skipList, db.tmpList
 }
 
-func (db *DbImpl) L0CompactionDone(newReq *NewSnapshotRequest) {
+func (db *DbImpl) CompactionDone(newReq *NewSnapshotRequest) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
