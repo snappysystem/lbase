@@ -101,6 +101,9 @@ func (c *Compactor) L0Compaction() {
 		Files:  map[int64]FileInfo{fileNumber: finfo},
 	}
 
+	// Insert a new level into L0
+	newReq.Levels = append(newReq.Levels, []int64{fileNumber})
+
 	// Copy previous L0 levels over.
 	idx := 0
 	for ; idx < c.maxL0Levels && idx < len(sinfo) && len(sinfo[idx]) > 0; idx++ {
@@ -110,9 +113,6 @@ func (c *Compactor) L0Compaction() {
 		}
 		newReq.Levels = append(newReq.Levels, tmp)
 	}
-
-	// Insert a new level into L0
-	newReq.Levels = append(newReq.Levels, []int64{fileNumber})
 
 	// If the corresponding L0 level already exists, skip it.
 	if idx < len(sinfo) {
@@ -164,9 +164,6 @@ func (c *Compactor) MergeCompaction() {
 		if len(infos) == 0 {
 			continue
 		}
-
-		// TODO: the L0 tables are inverted, need to be fixed!
-		//fmt.Println("tid", infos[0].id)
 
 		tid := infos[0].id
 		tbl := c.impl.GetTableCache().Get(tid)
