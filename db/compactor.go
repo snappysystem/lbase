@@ -165,6 +165,9 @@ func (c *Compactor) MergeCompaction() {
 			continue
 		}
 
+		// TODO: the L0 tables are inverted, need to be fixed!
+		//fmt.Println("tid", infos[0].id)
+
 		tid := infos[0].id
 		tbl := c.impl.GetTableCache().Get(tid)
 		if tbl == nil {
@@ -259,20 +262,21 @@ func (c *Compactor) MergeCompaction() {
 		builder := MakeTableBuilder(fh, 2*int(c.minTableSize))
 		size := int64(0)
 
-		for ; iter.Valid() && size < c.minTableSize; iter.Next() {
+		for size < c.minTableSize && iter.Valid() {
 			key, value := iter.Key(), iter.Value()
 			builder.Add(key, value)
 			size = size + int64(len(key)) + int64(len(value))
+			iter.Next()
 		}
 
-		newInfos = append(newInfos, finfo)
+		aborting := false
 
 		// If the last table is too small, it should be merged with previous
 		// table. We will handle this situation out of the for loop.
 		if !iter.Valid() && size < c.minTableSize && previousBuilder != nil {
 			builder.Abort()
 			remainingBuilder = previousBuilder
-			break
+			aborting = true
 		}
 
 		// Get the last element
@@ -283,7 +287,14 @@ func (c *Compactor) MergeCompaction() {
 		}
 
 		finfo.EndKey = iter.Key()
+		newInfos = append(newInfos, finfo)
+
+		// Restore the original position of iterator.
 		iter.Next()
+
+		if aborting {
+			break
+		}
 
 		// Delay the finalization of previous table, so that if the last table
 		// is too small, use the previous table to host remaining data instead
@@ -308,7 +319,7 @@ func (c *Compactor) MergeCompaction() {
 			remainingBuilder.Add(iter.Key(), iter.Value())
 		}
 
-		iter.Prev()
+		iter.SeekToLast()
 		newInfos[lastIdx-1].EndKey = iter.Key()
 		remainingBuilder.Finalize(c.impl.GetComparator())
 		newInfos = newInfos[:lastIdx]

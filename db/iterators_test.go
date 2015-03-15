@@ -80,6 +80,51 @@ func TestHeapIteratorForward(t *testing.T) {
 	}
 }
 
+func TestHeapIteratorZigZag(t *testing.T) {
+	l0 := &SliceIterator{vals: []string{"1004"}, idx: 0}
+	l1 := &SliceIterator{vals: []string{"1000"}, idx: 0}
+	l2 := &SliceIterator{vals: []string{"1001"}, idx: 0}
+	l3 := &SliceIterator{vals: []string{"1002"}, idx: 0}
+	l4 := &SliceIterator{vals: []string{"1003"}, idx: 0}
+
+	iters := []Iterator{}
+
+	iters = append(iters, l0)
+	iters = append(iters, l1)
+	iters = append(iters, l2)
+	iters = append(iters, l3)
+	iters = append(iters, l4)
+
+	it := MakeHeapIterator(iters, ByteOrder(0))
+	it.SeekToFirst()
+
+	expected := []string{
+		"1000",
+		"1001",
+		"1002",
+		"1003",
+		"1004",
+	}
+
+	for _, key := range expected {
+		if !it.Valid() {
+			t.Error("iterator is not valid")
+		}
+		if string(it.Key()) != key {
+			t.Error("expect ", key, " got ", string(it.Key()))
+		}
+
+		it.Prev()
+		if it.Valid() {
+			it.Next()
+		} else {
+			it.SeekToFirst()
+		}
+
+		it.Next()
+	}
+}
+
 func TestHeapIteratorBackward(t *testing.T) {
 	l0 := &SliceIterator{vals: []string{"hello", "test"}, idx: 0}
 	l1 := &SliceIterator{vals: []string{"abc", "sample"}, idx: 0}
@@ -243,6 +288,37 @@ func TestConcatenationIteratorMove(t *testing.T) {
 			t.Error("Wrong key found!")
 		}
 		iter.Prev()
+	}
+}
+
+func TestConcatenationIteratorZigZag(t *testing.T) {
+	l0 := &SliceIterator{vals: []string{"abc", "hello"}}
+	l1 := &SliceIterator{vals: []string{"play", "quick"}}
+
+	iter := &ConcatenationIterator{iters: []Iterator{l0, l1}}
+	iter.SeekToFirst()
+
+	expection := []string{"abc", "hello", "play", "quick"}
+	for _, val := range expection {
+		if !iter.Valid() {
+			t.Error("Expect more entries!")
+		}
+		if string(iter.Key()) != val {
+			t.Error("Wrong key found!", string(iter.Key()), " expect ", val)
+		}
+
+		iter.Prev()
+		if iter.Valid() {
+			iter.Next()
+		} else {
+			iter.SeekToFirst()
+		}
+
+		iter.Next()
+	}
+
+	if iter.Valid() {
+		t.Error("Expect to be end at this point!")
 	}
 }
 

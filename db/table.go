@@ -132,6 +132,11 @@ func (it *DifferentialDecodingIter) Key() []byte {
 			for true {
 				curKey = it.blockIter.Key()
 				if *(*uint8)(unsafe.Pointer(&curKey[0])) == uint8(0) {
+					// If this is a full key, return it immediately.
+					if backoff == 0 {
+						return curKey[1:]
+					}
+					it.Seek(curKey[1:])
 					break
 				} else {
 					backoff = backoff + 1
@@ -143,15 +148,7 @@ func (it *DifferentialDecodingIter) Key() []byte {
 			}
 
 			// derive latter keys from the nearest full key
-			for ; backoff > 1; backoff-- {
-				it.Next()
-				curKey = DecodeDifferentialKey(curKey, it.blockIter.Key())
-			}
-
-			it.prevKey = curKey
-
-			// restore raw iterator to original position
-			if backoff > 0 {
+			for ; backoff > 0; backoff-- {
 				it.Next()
 			}
 		}

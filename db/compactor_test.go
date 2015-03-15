@@ -99,7 +99,7 @@ func TestMergeCompaction(t *testing.T) {
 		numTblCache:  4,
 		minLogSize:   64,
 		maxL0Levels:  4,
-		minTableSize: 4 * 1024 * 1024,
+		minTableSize: 128,
 	}
 
 	db := MakeDb(opt)

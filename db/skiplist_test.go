@@ -64,6 +64,42 @@ func TestOverridePreviousPut(t *testing.T) {
 	}
 }
 
+func TestSkiplistSingleSeek(t *testing.T) {
+	slist := MakeSkiplist()
+	slist.Put([]byte("1004"), []byte("world"))
+
+	ro := &ReadOptions{}
+	iter := slist.NewIterator(ro)
+
+	iter.Seek([]byte("1002"))
+	if !iter.Valid() {
+		t.Error("Fails to seek!")
+	}
+}
+
+func TestZigZagScan(t *testing.T) {
+	slist := MakeSkiplist()
+	slist.Put([]byte("hello"), []byte("world"))
+
+	ro := &ReadOptions{}
+	iter := slist.NewIterator(ro)
+
+	iter.SeekToFirst()
+	if !iter.Valid() || string(iter.Key()) != "hello" {
+		t.Error("Fails to scan skiplist")
+	}
+
+	iter.Prev()
+	if iter.Valid() {
+		t.Error("skiplist should not be valid!")
+	}
+
+	iter.SeekToFirst()
+	if !iter.Valid() || string(iter.Key()) != "hello" {
+		t.Error("Fails to scan skiplist")
+	}
+}
+
 func TestSkiplistPutGetMore(t *testing.T) {
 	const numElements = 5000
 	data := make([][]byte, 0, numElements)
@@ -192,7 +228,7 @@ func TestSkiplistSeek(t *testing.T) {
 
 	iter.Seek([]byte("gzip"))
 	if !iter.Valid() || string(iter.Key()) != "hello" {
-		t.Error("Fails to seek to closest location")
+		t.Error("Fails to seek to closest location", string(iter.Key()))
 	}
 
 	iter.Close()

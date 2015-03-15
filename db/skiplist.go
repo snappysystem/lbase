@@ -389,6 +389,12 @@ func (a *skiplistIter) Seek(key []byte) {
 		a.cur = traces[0]
 	} else if traces[0] != nil {
 		a.cur = traces[0].getNext()
+	} else {
+		// It is possible that the skiplist is not empty,
+		// but the key we are looking for is at the very
+		// beginning. In this case, search linearly from start.
+		for a.SeekToFirst(); a.Valid() && a.slist.order.Compare(a.Key(), key) < 0; a.Next() {
+		}
 	}
 }
 

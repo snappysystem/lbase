@@ -116,6 +116,71 @@ func TestBuildTableAndMoveBackward(t *testing.T) {
 	iter.Close()
 }
 
+func TestBuildTableAndZigZagScan(t *testing.T) {
+	root := "/tmp/table_test/testBuildTableAndZigZagScan"
+
+	os.RemoveAll(root)
+	os.MkdirAll(root, os.ModePerm)
+
+	// create a table builder
+	fname := strings.Join([]string{root, "sstfile.nsst"}, "/")
+	f := MakeLocalWritableFile(fname)
+	if f == nil {
+		t.Error("Fails to create a new file")
+	}
+
+	b := MakeTableBuilder(f, 2*1024*1024)
+
+	// build a table
+	for i := 10000; i < 10006; i++ {
+		key := []byte(fmt.Sprintf("%d", i))
+		b.Add(key, key)
+	}
+
+	order := ByteOrder(0)
+	res := b.Finalize(order)
+
+	if res == nil {
+		t.Error("Fails to get a table object")
+	}
+
+	// verify that data is correct
+	iter := res.NewIterator()
+	if iter == nil {
+		t.Error("fails to get an iterator")
+	}
+
+	iter.SeekToFirst()
+
+	for i := 10000; i < 10006; i++ {
+		if !iter.Valid() {
+			t.Error("Premature at the end")
+		}
+
+		key := string(iter.Key())
+		val, err := strconv.Atoi(key)
+		if err != nil {
+			t.Error("fails convert string to integer", key)
+		}
+		if val != i {
+			t.Error("key mismatch ", val, " expect ", i)
+		}
+
+		iter.Prev()
+		if iter.Valid() {
+			iter.Next()
+		} else {
+			iter.SeekToFirst()
+		}
+
+		iter.Next()
+	}
+
+	if iter.Valid() {
+		t.Error("iterator passes the end")
+	}
+}
+
 func TestBuildTableAndSeek(t *testing.T) {
 	root := "/tmp/table_test/testBuildTableAndIterate"
 
