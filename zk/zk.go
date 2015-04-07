@@ -14,7 +14,16 @@ void my_global_watcher(
   void *ctx) {
 }
 
+extern void GoWatcher(int type, int state, void* path, void* ctx);
 
+void my_watcher(
+  zhandle_t *zh,
+  int type,
+  int state,
+  const char* path,
+  void *ctx) {
+  GoWatcher(type, state, (void*)path, ctx);
+}
 
 void my_void_completion(int rc, const void *data) {
 }
@@ -176,8 +185,8 @@ var (
 
 
 type Watcher struct {
-	Event int
 	Type int
+	State int
 	Path string
 }
 
@@ -222,6 +231,15 @@ func (sr *StatResult) GetNumChildren() int32 {
 	return int32(sr.stat.numChildren)
 }
 
+func GoWatcher2(Type C.int, state C.int, path unsafe.Pointer, ctx unsafe.Pointer) {
+	watcher := Watcher{
+		Type: int(Type),
+		State: int(state),
+		Path: C.GoString((*C.char)(path)),
+	}
+	ch := (*chan Watcher)(ctx)
+	(*ch) <- watcher
+}
 
 func GoStatCompletion2(rc C.int, vstat unsafe.Pointer, data unsafe.Pointer) {
 	stat := (*C.struct_Stat)(vstat)
@@ -276,7 +294,7 @@ func (zh ZHandle) GetState() int {
  * \brief checks the existence of a node in zookeeper.
  * 
  */
-func (zh ZHandle) Exists(path string) (ret StatResult, ok bool) {
+func (zh ZHandle) Exists(path string) StatResult {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -289,13 +307,12 @@ func (zh ZHandle) Exists(path string) (ret StatResult, ok bool) {
 		C.stat_completion_t(C.my_stat_completion),
 		unsafe.Pointer(&res))
 
+	var ret StatResult
 	if err != nil {
-		ok = false
-	} else {
-		ok = true
 		ret.rc = rc
+	} else {
 		ret = <-res
 	}
 
-	return
+	return ret
 }
