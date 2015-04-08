@@ -34,8 +34,12 @@ void my_stat_completion(int rc, const struct Stat *stat, const void *data) {
   GoStatCompletion(rc, (void*)stat, (void*)data);
 }
 
+extern void GoDataCompletion(
+  int rc, void* value, int value_len, void* stat, void* data);
+
 void my_data_completion(int rc, const char *value, int value_len,
        const struct Stat *stat, const void *data) {
+  GoDataCompletion(rc, (void*)value, value_len, (void*)stat, (void*)data);
 }
 
 void my_strings_completion(int rc,
@@ -231,6 +235,52 @@ func (sr *StatResult) GetNumChildren() int32 {
 	return int32(sr.stat.numChildren)
 }
 
+type DataResult struct {
+	rc C.int
+	data []byte
+	stat C.struct_Stat
+}
+
+func (sr *DataResult) GetData() []byte {
+	return sr.data
+}
+
+func (sr *DataResult) GetRc() int {
+	return int(sr.rc)
+}
+
+func (sr *DataResult) GetCtime() int64 {
+	return int64(sr.stat.ctime)
+}
+
+func (sr *DataResult) GetMtime() int64 {
+	return int64(sr.stat.mtime)
+}
+
+func (sr *DataResult) GetVersion() int32 {
+	return int32(sr.stat.version)
+}
+
+func (sr *DataResult) GetCversion() int32 {
+	return int32(sr.stat.cversion)
+}
+
+func (sr *DataResult) GetAversion() int32 {
+	return int32(sr.stat.aversion)
+}
+
+func (sr *DataResult) GetEphemeralOwner() int64 {
+	return int64(sr.stat.ephemeralOwner)
+}
+
+func (sr *DataResult) GetDataLength() int32 {
+	return int32(sr.stat.dataLength)
+}
+
+func (sr *DataResult) GetNumChildren() int32 {
+	return int32(sr.stat.numChildren)
+}
+
 func GoWatcher2(Type C.int, state C.int, path unsafe.Pointer, ctx unsafe.Pointer) {
 	watcher := Watcher{
 		Type: int(Type),
@@ -248,6 +298,22 @@ func GoStatCompletion2(rc C.int, vstat unsafe.Pointer, data unsafe.Pointer) {
 		rc : rc,
 		stat : *stat,
 	}
+	(*ch) <-result
+}
+
+func GoDataCompletion2(
+	rc C.int,
+	value unsafe.Pointer,
+	value_len C.int,
+	stat, data unsafe.Pointer) {
+
+	ch := (*chan DataResult)(data)
+	result := DataResult{
+		rc: rc,
+		data: C.GoBytes(value, value_len),
+		stat: *(*C.struct_Stat)(stat),
+	}
+
 	(*ch) <-result
 }
 
@@ -315,4 +381,87 @@ func (zh ZHandle) Exists(path string) StatResult {
 	}
 
 	return ret
+}
+
+/**
+ * \brief checks the existence of a node in zookeeper.
+ * 
+ */
+func (zh ZHandle) ExistsW(path string) (StatResult, chan Watcher) {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res1 := make(chan StatResult, 1)
+	res2 := make(chan Watcher, 1)
+
+	rc,err := C.zoo_awexists(
+		zh.handle,
+		cpath,
+		C.watcher_fn(C.my_watcher),
+		unsafe.Pointer(&res2),
+		C.stat_completion_t(C.my_stat_completion),
+		unsafe.Pointer(&res1))
+
+	var ret StatResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res1
+	}
+
+	return ret, res2
+}
+
+/**
+ * \brief gets the data associated with a node.
+ */
+func (zh ZHandle) Get(path string) DataResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan DataResult, 1)
+	rc,err := C.zoo_awget(
+		zh.handle,
+		cpath,
+		nil,
+		nil,
+		C.data_completion_t(C.my_data_completion),
+		unsafe.Pointer(&res))
+
+	var ret DataResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
+
+/**
+ * \brief gets the data associated with a node.
+ */
+func (zh ZHandle) GetW(path string) (DataResult, chan Watcher) {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res1 := make(chan DataResult, 1)
+	res2 := make(chan Watcher, 1)
+
+	rc,err := C.zoo_awget(
+		zh.handle,
+		cpath,
+		C.watcher_fn(C.my_watcher),
+		unsafe.Pointer(&res2),
+		C.data_completion_t(C.my_data_completion),
+		unsafe.Pointer(&res1))
+
+	var ret DataResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res1
+	}
+
+	return ret, res2
 }
