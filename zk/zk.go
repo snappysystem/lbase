@@ -352,7 +352,7 @@ func NewZHandle(hosts string, recvTimeout int, id *ZkID) (h ZHandle, ok bool) {
  * 
  * The return value will be one of the \ref State Consts.
  */
-func (zh ZHandle) GetState() int {
+func (zh *ZHandle) GetState() int {
 	return int(C.zoo_state(zh.handle))
 }
 
@@ -360,7 +360,7 @@ func (zh ZHandle) GetState() int {
  * \brief checks the existence of a node in zookeeper.
  * 
  */
-func (zh ZHandle) Exists(path string) StatResult {
+func (zh *ZHandle) Exists(path string) StatResult {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -387,7 +387,7 @@ func (zh ZHandle) Exists(path string) StatResult {
  * \brief checks the existence of a node in zookeeper.
  * 
  */
-func (zh ZHandle) ExistsW(path string) (StatResult, chan Watcher) {
+func (zh *ZHandle) ExistsW(path string) (StatResult, chan Watcher) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -415,7 +415,7 @@ func (zh ZHandle) ExistsW(path string) (StatResult, chan Watcher) {
 /**
  * \brief gets the data associated with a node.
  */
-func (zh ZHandle) Get(path string) DataResult {
+func (zh *ZHandle) Get(path string) DataResult {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -441,7 +441,7 @@ func (zh ZHandle) Get(path string) DataResult {
 /**
  * \brief gets the data associated with a node.
  */
-func (zh ZHandle) GetW(path string) (DataResult, chan Watcher) {
+func (zh *ZHandle) GetW(path string) (DataResult, chan Watcher) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -464,4 +464,44 @@ func (zh ZHandle) GetW(path string) (DataResult, chan Watcher) {
 	}
 
 	return ret, res2
+}
+
+/**
+ * \brief sets the data associated with a node.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ * \param buffer the buffer holding data to be written to the node.
+ * \param version the expected version of the node. The function will fail if 
+ * the actual version of the node does not match the expected version. If -1 is 
+ * used the version check will not take place. * completion: If null, 
+ * the function will execute synchronously. Otherwise, the function will return 
+ * immediately and invoke the completion routine when the request completes.
+ * \return ZOK on success or one of the following errcodes on failure:
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) Set(path string, buffer []byte, version int) StatResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan StatResult, 1)
+	rc,err := C.zoo_aset(
+		zh.handle,
+		cpath,
+		(*C.char)(unsafe.Pointer(&buffer[0])),
+		C.int(len(buffer)),
+		C.int(version),
+		C.stat_completion_t(C.my_stat_completion),
+		unsafe.Pointer(&res))
+
+	var ret StatResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
 }
