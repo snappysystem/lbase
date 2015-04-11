@@ -841,3 +841,120 @@ func (zh *ZHandle) SetACL(path string, version int, goACLs []ACL) int {
 
 	return ret
 }
+
+/**
+ * \brief create a node.
+ * 
+ * This method will create a node in ZooKeeper. A node can only be created if
+ * it does not already exists. The Create Flags affect the creation of nodes.
+ * If ZOO_EPHEMERAL flag is set, the node will automatically get removed if the
+ * client session goes away. If the ZOO_SEQUENCE flag is set, a unique
+ * monotonically increasing sequence number is appended to the path name. The
+ * sequence number is always fixed length of 10 digits, 0 padded.
+ * 
+ * \param path The name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ * \param value The data to be stored in the node.
+ * \param acl The initial ACL of the node. The ACL must not be null or empty.
+ * \param flags this parameter can be set to 0 for normal create or an OR
+ *    of the Create Flags
+ * \param completion the routine to invoke when the request completes. The completion
+ * will be triggered with one of the following codes passed in as the rc argument:
+ * ZOK operation completed successfully
+ * ZNONODE the parent node does not exist.
+ * ZNODEEXISTS the node already exists
+ * ZNOAUTH the client does not have permission.
+ * ZNOCHILDRENFOREPHEMERALS cannot create children of ephemeral nodes.
+ * \return ZOK on success or one of the following errcodes on failure:
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) Create(path, value string, goACLs []ACL, flags int) StringResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	cvalue := C.CString(value)
+	defer C.free(unsafe.Pointer(cvalue))
+
+	// Convert ACL from go struct to C struct.
+	cACLs := make([]C.struct_ACL, len(goACLs))
+	tmps := make([][]byte, 0, 2 * len(goACLs))
+
+	for i := 0; i < len(goACLs); i++ {
+		schemeBytes := []byte(goACLs[i].Scheme)
+		idBytes := []byte(goACLs[i].Id)
+		tmps = append(tmps, schemeBytes, idBytes)
+		cACLs[i].perms = C.int32_t(goACLs[i].Perms)
+		cACLs[i].id.scheme = (*C.char)(unsafe.Pointer(&schemeBytes[0]))
+		cACLs[i].id.id = (*C.char)(unsafe.Pointer(&idBytes[0]))
+	}
+
+	var cVector C.struct_ACL_vector
+
+	cVector.count = C.int32_t(len(goACLs))
+	cVector.data = &cACLs[0]
+
+	res := make(chan StringResult, 1)
+
+	rc,err := C.zoo_acreate(
+		zh.handle,
+		cpath,
+		cvalue,
+		C.int(len(value)),
+		&cVector,
+		C.int(flags),
+		C.string_completion_t(C.my_string_completion),
+		unsafe.Pointer(&res))
+
+	var ret StringResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
+
+/**
+ * \brief delete a node in zookeeper.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ * \param version the expected version of the node. The function will fail if the
+ *    actual version of the node does not match the expected version.
+ *  If -1 is used the version check will not take place. 
+ * \param completion the routine to invoke when the request completes. The completion
+ * will be triggered with one of the following codes passed in as the rc argument:
+ * ZOK operation completed successfully
+ * ZNONODE the node does not exist.
+ * ZNOAUTH the client does not have permission.
+ * ZBADVERSION expected version does not match actual version.
+ * ZNOTEMPTY children are present; node cannot be deleted.
+ * \return ZOK on success or one of the following errcodes on failure:
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) Delete(path string, version int) int {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan int, 1)
+	rc,err := C.zoo_adelete(
+		zh.handle,
+		cpath,
+		C.int(version),
+		C.void_completion_t(C.my_void_completion),
+		unsafe.Pointer(&res))
+
+	var ret int
+	if err != nil {
+		ret = int(rc)
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
