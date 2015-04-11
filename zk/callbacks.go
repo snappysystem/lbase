@@ -103,6 +103,38 @@ func GoStringCompletion(rc C.int, value, data unsafe.Pointer) {
 	(*ch) <-result
 }
 
+//export GoACLCompletion
+func GoACLCompletion(rc C.int, aclVec, stat, data unsafe.Pointer) {
+	ch := (*chan ACLResult)(data)
+	aclCVec := (*C.struct_ACL_vector)(aclVec)
+	goACLs := make([]ACL, 0, aclCVec.count)
+
+	// Simulate a go slice.
+	ppvHdr := reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(aclCVec.data)),
+		Len: int(aclCVec.count),
+		Cap: int(aclCVec.count),
+	}
+	goSlice := *(*[]C.struct_ACL)(unsafe.Pointer(&ppvHdr))
+
+	for _,s := range goSlice {
+		acl := ACL{
+			Perms: int(s.perms),
+			Scheme: C.GoString(s.id.scheme),
+			Id: C.GoString(s.id.id),
+		}
+		goACLs = append(goACLs, acl)
+	}
+
+	result := ACLResult{
+		rc: rc,
+		acls: goACLs,
+		stat: *(*C.struct_Stat)(stat),
+	}
+
+	(*ch) <-result
+}
+
 //export GoWatcher
 func GoWatcher(Type C.int, state C.int, path unsafe.Pointer, ctx unsafe.Pointer) {
 	watcher := Watcher{

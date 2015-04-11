@@ -62,8 +62,11 @@ void my_string_completion(int rc, const char *value, const void *data) {
   GoStringCompletion(rc, (void*)value, (void*)data);
 }
 
+extern void GoACLCompletion(int rc, void* aclVec, void* stat, void* data);
+
 void my_acl_completion(int rc, struct ACL_vector *acl,
        struct Stat *stat, const void *data) {
+  GoACLCompletion(rc, (void*)acl, (void*)stat, (void*)data);
 }
 */
 import "C"
@@ -195,6 +198,11 @@ var (
 	ZOO_NOTWATCHING_EVENT = C.ZOO_NOTWATCHING_EVENT
 )
 
+type ACL struct {
+	Perms int
+	Scheme string
+	Id string
+}
 
 type Watcher struct {
 	Type int
@@ -355,6 +363,48 @@ func (sr *StringResult) GetString() string {
 
 func (sr *StringResult) GetRc() int {
 	return int(sr.rc)
+}
+
+type ACLResult struct {
+	rc C.int
+	acls []ACL
+	stat C.struct_Stat
+}
+
+func (sr *ACLResult) GetACLs() []ACL {
+	return sr.acls
+}
+
+func (sr *ACLResult) GetRc() int {
+	return int(sr.rc)
+}
+
+func (sr *ACLResult) GetCtime() int64 {
+	return int64(sr.stat.ctime)
+}
+
+func (sr *ACLResult) GetMtime() int64 {
+	return int64(sr.stat.mtime)
+}
+
+func (sr *ACLResult) GetVersion() int32 {
+	return int32(sr.stat.version)
+}
+
+func (sr *ACLResult) GetCversion() int32 {
+	return int32(sr.stat.cversion)
+}
+
+func (sr *ACLResult) GetAversion() int32 {
+	return int32(sr.stat.aversion)
+}
+
+func (sr *ACLResult) GetEphemeralOwner() int64 {
+	return int64(sr.stat.ephemeralOwner)
+}
+
+func (sr *ACLResult) GetDataLength() int32 {
+	return int32(sr.stat.dataLength)
 }
 
 
@@ -690,3 +740,42 @@ func (zh *ZHandle) Sync(path string) StringResult {
 
 	return ret
 }
+
+/**
+ * \brief gets the acl associated with a node.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ * \param completion the routine to invoke when the request completes. The completion
+ * will be triggered with one of the following codes passed in as the rc argument:
+ * ZOK operation completed successfully
+ * ZNONODE the node does not exist.
+ * ZNOAUTH the client does not have permission.
+ * \param data the data that will be passed to the completion routine when 
+ * the function completes.
+ * \return ZOK on success or one of the following errcodes on failure:
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) GetACL(path string) ACLResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan ACLResult, 1)
+	rc,err := C.zoo_aget_acl(
+		zh.handle,
+		cpath,
+		C.acl_completion_t(C.my_acl_completion),
+		unsafe.Pointer(&res))
+
+	var ret ACLResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
+
