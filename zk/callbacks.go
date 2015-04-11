@@ -92,6 +92,17 @@ func GoStringsStatCompletion(rc C.int, strings, stat, data unsafe.Pointer) {
 	(*ch) <-result
 }
 
+//export GoStringCompletion
+func GoStringCompletion(rc C.int, value, data unsafe.Pointer) {
+	ch := (*chan StringResult)(data)
+	result := StringResult{
+		rc: rc,
+		str: C.GoString((*C.char)(value)),
+	}
+
+	(*ch) <-result
+}
+
 //export GoWatcher
 func GoWatcher(Type C.int, state C.int, path unsafe.Pointer, ctx unsafe.Pointer) {
 	watcher := Watcher{

@@ -56,7 +56,10 @@ void my_strings_stat_completion(int rc, const struct String_vector *strings,
   GoStringsStatCompletion(rc, (void*)strings, (void*)stat, (void*)data);
 }
 
+extern void GoStringCompletion(int rc, void* value, void* data);
+
 void my_string_completion(int rc, const char *value, const void *data) {
+  GoStringCompletion(rc, (void*)value, (void*)data);
 }
 
 void my_acl_completion(int rc, struct ACL_vector *acl,
@@ -341,8 +344,17 @@ func (sr *StringsStatResult) GetDataLength() int32 {
 	return int32(sr.stat.dataLength)
 }
 
-func (sr *StringsStatResult) GetNumChildren() int32 {
-	return int32(sr.stat.numChildren)
+type StringResult struct {
+	rc C.int
+	str string
+}
+
+func (sr *StringResult) GetString() string {
+	return sr.str
+}
+
+func (sr *StringResult) GetRc() int {
+	return int(sr.rc)
 }
 
 
@@ -648,3 +660,33 @@ func (zh *ZHandle) GetChildrenAndStatW(path string) (StringsStatResult, chan Wat
 	return ret, res2
 }
 
+/**
+ * \brief Flush leader channel.
+ *
+ * \param path the name of the node. Expressed as a file name with slashes
+ * separating ancestors of the node.
+ * \return ZOK on success or one of the following errcodes on failure:
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) Sync(path string) StringResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan StringResult, 1)
+	rc,err := C.zoo_async(
+		zh.handle,
+		cpath,
+		C.string_completion_t(C.my_string_completion),
+		unsafe.Pointer(&res))
+
+	var ret StringResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
