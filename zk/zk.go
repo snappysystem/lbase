@@ -25,7 +25,10 @@ void my_watcher(
   GoWatcher(type, state, (void*)path, ctx);
 }
 
+extern void GoVoidCompletion(int rc, void* data);
+
 void my_void_completion(int rc, const void *data) {
+  GoVoidCompletion(rc, (void*)data);
 }
 
 extern void GoStatCompletion(int rc, void* stat, void* data);
@@ -779,3 +782,62 @@ func (zh *ZHandle) GetACL(path string) ACLResult {
 	return ret
 }
 
+/**
+ * \brief sets the acl associated with a node synchronously.
+ * 
+ * \param zh the zookeeper handle obtained by a call to \ref zookeeper_init
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ * \param version the expected version of the path.
+ * \param acl the acl to be set on the path. 
+ * \return the return code for the function call.
+ * ZOK operation completed successfully
+ * ZNONODE the node does not exist.
+ * ZNOAUTH the client does not have permission.
+ * ZINVALIDACL invalid ACL specified
+ * ZBADVERSION expected version does not match actual version.
+ * ZBADARGUMENTS - invalid input parameters
+ * ZINVALIDSTATE - zhandle state is either ZOO_SESSION_EXPIRED_STATE or ZOO_AUTH_FAILED_STATE
+ * ZMARSHALLINGERROR - failed to marshall a request; possibly, out of memory
+ */
+func (zh *ZHandle) SetACL(path string, version int, goACLs []ACL) int {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	// Convert ACL from go struct to C struct.
+	cACLs := make([]C.struct_ACL, len(goACLs))
+	tmps := make([][]byte, 0, 2 * len(goACLs))
+
+	for i := 0; i < len(goACLs); i++ {
+		schemeBytes := []byte(goACLs[i].Scheme)
+		idBytes := []byte(goACLs[i].Id)
+		tmps = append(tmps, schemeBytes, idBytes)
+		cACLs[i].perms = C.int32_t(goACLs[i].Perms)
+		cACLs[i].id.scheme = (*C.char)(unsafe.Pointer(&schemeBytes[0]))
+		cACLs[i].id.id = (*C.char)(unsafe.Pointer(&idBytes[0]))
+	}
+
+	var cVector C.struct_ACL_vector
+
+	cVector.count = C.int32_t(len(goACLs))
+	cVector.data = &cACLs[0]
+
+	res := make(chan int, 1)
+
+	rc,err := C.zoo_aset_acl(
+		zh.handle,
+		cpath,
+		C.int(version),
+		&cVector,
+		C.void_completion_t(C.my_void_completion),
+		unsafe.Pointer(&res))
+
+	var ret int
+	if err != nil {
+		ret = int(rc)
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}

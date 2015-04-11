@@ -11,6 +11,12 @@ import (
 	"reflect"
 )
 
+//export GoVoidCompletion
+func GoVoidCompletion(rc C.int, data unsafe.Pointer) {
+	ch := (*chan int)(data)
+	(*ch) <-int(rc)
+}
+
 //export GoStatCompletion
 func GoStatCompletion(rc C.int, vstat unsafe.Pointer, data unsafe.Pointer) {
 	stat := (*C.struct_Stat)(vstat)
