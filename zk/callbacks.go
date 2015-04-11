@@ -8,6 +8,7 @@ import "C"
 
 import (
 	"unsafe"
+	"reflect"
 )
 
 //export GoStatCompletion
@@ -33,6 +34,32 @@ func GoDataCompletion(
 		rc: rc,
 		data: C.GoBytes(value, value_len),
 		stat: *(*C.struct_Stat)(stat),
+	}
+
+	(*ch) <-result
+}
+
+//export GoStringsCompletion
+func GoStringsCompletion(rc C.int, strings, data unsafe.Pointer) {
+	ch := (*chan StringsResult)(data)
+	strVec := (*C.struct_String_vector)(strings)
+	strs := make([]string, 0, strVec.count)
+
+	// Simulate a go slice.
+	ppvHdr := reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(strVec.data)),
+		Len: int(strVec.count),
+		Cap: int(strVec.count),
+	}
+	goSlice := *(*[]unsafe.Pointer)(unsafe.Pointer(&ppvHdr))
+
+	for _,s := range goSlice {
+		strs = append(strs, C.GoString((*C.char)(s)))
+	}
+
+	result := StringsResult{
+		rc: rc,
+		strings: strs,
 	}
 
 	(*ch) <-result

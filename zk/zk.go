@@ -42,8 +42,11 @@ void my_data_completion(int rc, const char *value, int value_len,
   GoDataCompletion(rc, (void*)value, value_len, (void*)stat, (void*)data);
 }
 
+extern void GoStringsCompletion(int rc, void* strings, void* data);
+
 void my_strings_completion(int rc,
        const struct String_vector *strings, const void *data) {
+  GoStringsCompletion(rc, (void*)strings, (void*)data);
 }
 
 void my_strings_stat_completion(int rc,
@@ -281,6 +284,19 @@ func (sr *DataResult) GetNumChildren() int32 {
 	return int32(sr.stat.numChildren)
 }
 
+type StringsResult struct {
+	rc C.int
+	strings []string
+}
+
+func (sr *StringsResult) GetStrings() []string {
+	return sr.strings
+}
+
+func (sr *StringsResult) GetRc() int {
+	return int(sr.rc)
+}
+
 
 type ZkID struct {
 	id C.clientid_t
@@ -468,4 +484,64 @@ func (zh *ZHandle) Set(path string, buffer []byte, version int) StatResult {
 	}
 
 	return ret
+}
+
+/**
+ * \brief lists the children of a node.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ */
+func (zh *ZHandle) GetChildren(path string) StringsResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan StringsResult, 1)
+	rc,err := C.zoo_awget_children(
+		zh.handle,
+		cpath,
+		nil,
+		nil,
+		C.strings_completion_t(C.my_strings_completion),
+		unsafe.Pointer(&res))
+
+	var ret StringsResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
+
+/**
+ * \brief lists the children of a node.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ */
+func (zh *ZHandle) GetChildrenW(path string) (StringsResult, chan Watcher) {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res1 := make(chan StringsResult, 1)
+	res2 := make(chan Watcher, 1)
+
+	rc,err := C.zoo_awget_children(
+		zh.handle,
+		cpath,
+		C.watcher_fn(C.my_watcher),
+		unsafe.Pointer(&res2),
+		C.strings_completion_t(C.my_strings_completion),
+		unsafe.Pointer(&res1))
+
+	var ret StringsResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res1
+	}
+
+	return ret, res2
 }
