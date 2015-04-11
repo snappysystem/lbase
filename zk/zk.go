@@ -49,9 +49,11 @@ void my_strings_completion(int rc,
   GoStringsCompletion(rc, (void*)strings, (void*)data);
 }
 
-void my_strings_stat_completion(int rc,
-       const struct String_vector *strings, const struct Stat *stat,
-       const void *data) {
+extern void GoStringsStatCompletion(int rc, void* strings, void* stat, void* data);
+
+void my_strings_stat_completion(int rc, const struct String_vector *strings,
+  const struct Stat *stat, const void *data) {
+  GoStringsStatCompletion(rc, (void*)strings, (void*)stat, (void*)data);
 }
 
 void my_string_completion(int rc, const char *value, const void *data) {
@@ -295,6 +297,52 @@ func (sr *StringsResult) GetStrings() []string {
 
 func (sr *StringsResult) GetRc() int {
 	return int(sr.rc)
+}
+
+type StringsStatResult struct {
+	rc C.int
+	strings []string
+	stat C.struct_Stat
+}
+
+func (sr *StringsStatResult) GetStrings() []string {
+	return sr.strings
+}
+
+func (sr *StringsStatResult) GetRc() int {
+	return int(sr.rc)
+}
+
+func (sr *StringsStatResult) GetCtime() int64 {
+	return int64(sr.stat.ctime)
+}
+
+func (sr *StringsStatResult) GetMtime() int64 {
+	return int64(sr.stat.mtime)
+}
+
+func (sr *StringsStatResult) GetVersion() int32 {
+	return int32(sr.stat.version)
+}
+
+func (sr *StringsStatResult) GetCversion() int32 {
+	return int32(sr.stat.cversion)
+}
+
+func (sr *StringsStatResult) GetAversion() int32 {
+	return int32(sr.stat.aversion)
+}
+
+func (sr *StringsStatResult) GetEphemeralOwner() int64 {
+	return int64(sr.stat.ephemeralOwner)
+}
+
+func (sr *StringsStatResult) GetDataLength() int32 {
+	return int32(sr.stat.dataLength)
+}
+
+func (sr *StringsStatResult) GetNumChildren() int32 {
+	return int32(sr.stat.numChildren)
 }
 
 
@@ -545,3 +593,58 @@ func (zh *ZHandle) GetChildrenW(path string) (StringsResult, chan Watcher) {
 
 	return ret, res2
 }
+
+/**
+ * \brief lists the children of a node, and get the parent stat.
+ * 
+ * \param path the name of the node. Expressed as a file name with slashes 
+ * separating ancestors of the node.
+ */
+func (zh *ZHandle) GetChildrenAndStat(path string) StringsStatResult {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res := make(chan StringsStatResult, 1)
+	rc,err := C.zoo_awget_children2(
+		zh.handle,
+		cpath,
+		nil,
+		nil,
+		C.strings_stat_completion_t(C.my_strings_stat_completion),
+		unsafe.Pointer(&res))
+
+	var ret StringsStatResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res
+	}
+
+	return ret
+}
+
+func (zh *ZHandle) GetChildrenAndStatW(path string) (StringsStatResult, chan Watcher) {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+
+	res1 := make(chan StringsStatResult, 1)
+	res2 := make(chan Watcher, 1)
+
+	rc,err := C.zoo_awget_children2(
+		zh.handle,
+		cpath,
+		C.watcher_fn(C.my_watcher),
+		unsafe.Pointer(&res2),
+		C.strings_stat_completion_t(C.my_strings_stat_completion),
+		unsafe.Pointer(&res1))
+
+	var ret StringsStatResult
+	if err != nil {
+		ret.rc = rc
+	} else {
+		ret = <-res1
+	}
+
+	return ret, res2
+}
+

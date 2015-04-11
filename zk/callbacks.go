@@ -65,6 +65,33 @@ func GoStringsCompletion(rc C.int, strings, data unsafe.Pointer) {
 	(*ch) <-result
 }
 
+//export GoStringsStatCompletion
+func GoStringsStatCompletion(rc C.int, strings, stat, data unsafe.Pointer) {
+	ch := (*chan StringsStatResult)(data)
+	strVec := (*C.struct_String_vector)(strings)
+	strs := make([]string, 0, strVec.count)
+
+	// Simulate a go slice.
+	ppvHdr := reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(strVec.data)),
+		Len: int(strVec.count),
+		Cap: int(strVec.count),
+	}
+	goSlice := *(*[]unsafe.Pointer)(unsafe.Pointer(&ppvHdr))
+
+	for _,s := range goSlice {
+		strs = append(strs, C.GoString((*C.char)(s)))
+	}
+
+	result := StringsStatResult{
+		rc: rc,
+		strings: strs,
+		stat: *(*C.struct_Stat)(stat),
+	}
+
+	(*ch) <-result
+}
+
 //export GoWatcher
 func GoWatcher(Type C.int, state C.int, path unsafe.Pointer, ctx unsafe.Pointer) {
 	watcher := Watcher{
