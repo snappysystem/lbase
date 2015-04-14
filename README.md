@@ -1,2 +1,2 @@
 # lbase
-A lightweight system
+A distributed key value store implemented in go language.
