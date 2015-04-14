@@ -76,6 +76,7 @@ import "C"
 
 import (
 	"unsafe"
+	"reflect"
 )
 
 // Zookeeper return code.
@@ -118,14 +119,26 @@ const (
 	ZSESSIONMOVED = C.ZSESSIONMOVED
 )
 
+/**
+ * @name ACL Consts
+ */
+var (
+	ZOO_PERM_READ = C.ZOO_PERM_READ
+	ZOO_PERM_WRITE = C.ZOO_PERM_WRITE
+	ZOO_PERM_CREATE = C.ZOO_PERM_CREATE
+	ZOO_PERM_DELETE = C.ZOO_PERM_DELETE
+	ZOO_PERM_ADMIN = C.ZOO_PERM_ADMIN
+	ZOO_PERM_ALL = C.ZOO_PERM_ALL
+)
+
 /** Zookeeper ACL constants */
 var (
 	/** This is a completely open ACL*/
-	ZOO_OPEN_ACL *C.struct_ACL_vector = &C.ZOO_OPEN_ACL_UNSAFE
+	ZOO_OPEN_ACLS = NewACLs(&C.ZOO_OPEN_ACL_UNSAFE)
 	/** This ACL gives the world the ability to read. */
-	ZOO_READ_ACL *C.struct_ACL_vector = &C.ZOO_READ_ACL_UNSAFE
+	ZOO_READ_ACLS = NewACLs(&C.ZOO_READ_ACL_UNSAFE)
 	/** This ACL gives the creators authentication id's all permissions. */
-	ZOO_CREATOR_ALL_ACL *C.struct_ACL_vector = &C.ZOO_CREATOR_ALL_ACL
+	ZOO_CREATOR_ALL_ACLS = NewACLs(&C.ZOO_CREATOR_ALL_ACL)
 )
 
 /**
@@ -205,6 +218,30 @@ type ACL struct {
 	Perms int
 	Scheme string
 	Id string
+}
+
+// Convert a C ACL vector into go ACL slice.
+func NewACLs(aclCVec *C.struct_ACL_vector) []ACL {
+	goACLs := make([]ACL, 0, aclCVec.count)
+
+	// Simulate a go slice.
+	ppvHdr := reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(aclCVec.data)),
+		Len: int(aclCVec.count),
+		Cap: int(aclCVec.count),
+	}
+	goSlice := *(*[]C.struct_ACL)(unsafe.Pointer(&ppvHdr))
+
+	for _,s := range goSlice {
+		acl := ACL{
+			Perms: int(s.perms),
+			Scheme: C.GoString(s.id.scheme),
+			Id: C.GoString(s.id.id),
+		}
+		goACLs = append(goACLs, acl)
+	}
+
+	return goACLs
 }
 
 type Watcher struct {
@@ -420,16 +457,40 @@ type ZHandle struct {
 }
 
 /**
- * \brief create a new Zookeeper handle.
+ * \brief create a new zookeeper handle to communicate with server.
  * 
- * The return value is the zookeeper handle.
+ * This method creates a new handle and a zookeeper session that corresponds
+ * to that handle. Session establishment is asynchronous, meaning that the
+ * session should not be considered established until (and unless) an
+ * event of state ZOO_CONNECTED_STATE is received.
+ * \param host comma separated host:port pairs, each corresponding to a zk
+ *   server. e.g. "127.0.0.1:3000,127.0.0.1:3001,127.0.0.1:3002"
+ * \param recvTimeout The current implementation requires that the timeout
+ * be a minimum of 2 times the tickTime (as set in the server configuration)
+ * and a maximum of 20 times the tickTime.
+ * \param clientid the id of a previously established session that this
+ *   client will be reconnecting to. Pass 0 if not reconnecting to a previous
+ *   session. Clients can access the session id of an established, valid,
+ *   connection by calling \ref zoo_client_id. If the session corresponding to
+ *   the specified clientid has expired, or if the clientid is invalid for 
+ *   any reason, the returned zhandle_t will be invalid -- the zhandle_t 
+ *   state will indicate the reason for failure (typically
+ *   ZOO_EXPIRED_SESSION_STATE).
+ * \return a pointer to the opaque zhandle structure. If it fails to create 
+ * a new zhandle the function returns NULL and the errno variable 
+ * indicates the reason.
  */
 func NewZHandle(hosts string, recvTimeout int, id *ZkID) (h ZHandle, ok bool) {
 	chosts := C.CString(hosts)
 	defer C.free(unsafe.Pointer(chosts))
 
+	var cid *C.clientid_t
+	if id != nil {
+		cid = &id.id
+	}
+
 	handle, err := C.zookeeper_init(
-		chosts, (C.watcher_fn)(C.my_global_watcher), C.int(recvTimeout), &id.id, nil, 0)
+		chosts, (C.watcher_fn)(C.my_global_watcher), C.int(recvTimeout), cid, nil, 0)
 
 	if err != nil {
 		ok = false
