@@ -59,6 +59,10 @@ func TestZkCreate(t *testing.T) {
 	if statRes.GetRc() != ZOK {
 		t.Error("Fails to call exists()")
 	}
+
+	if statRes.GetVersion() != 0 {
+		t.Error("Expected version ", statRes.GetVersion())
+	}
 }
 
 func TestZkGet(t *testing.T) {
@@ -140,5 +144,85 @@ func TestZkExistW(t *testing.T) {
 		// Expect default behavior
 		default:
 			t.Error("Channel should be available by now")
+	}
+
+	// Verify that data has been written correctly.
+	dataRes := h.Get(path)
+	if dataRes.GetRc() != ZOK {
+		t.Error("Fails to call exists()")
+	}
+
+	if value != string(dataRes.GetData()) {
+		t.Error("Fails to get the same data!")
+	}
+}
+
+func TestZkSet(t *testing.T) {
+	path := "/testZkSet"
+	value := "something"
+	service := fmt.Sprintf("localhost:%d", Port)
+	h,ok := NewZHandle(service, Timeout, nil)
+	if !ok {
+		t.Error("Fails to create a zookeeper handle")
+	}
+
+	// Make sure that previous leftovers are all gone.
+	h.Delete(path, -1)
+
+	// Create a new znode.
+	strRes := h.Create(path, value, ZOO_OPEN_ACLS, 0)
+	if strRes.GetRc() != ZOK {
+		t.Error("Fails to create a path")
+	}
+
+	newValue := "newValue"
+	statRes := h.Set(path, []byte(newValue), 0)
+
+	if statRes.GetRc() != ZOK {
+		t.Error("Fails to set a value")
+	}
+	if statRes.GetVersion() != 1 {
+		t.Error("Real version number is ", statRes.GetVersion())
+	}
+}
+
+func TestZkGetChildren(t *testing.T) {
+	path := "/testZkGetChildren"
+	value := "something"
+	service := fmt.Sprintf("localhost:%d", Port)
+	h,ok := NewZHandle(service, Timeout, nil)
+	if !ok {
+		t.Error("Fails to create a zookeeper handle")
+	}
+
+	// Make sure that previous leftovers are all gone.
+	h.Delete(path + "/a", -1)
+	h.Delete(path + "/b", -1)
+	h.Delete(path, -1)
+
+	// Create new znodes.
+	strRes := h.Create(path, value, ZOO_OPEN_ACLS, 0)
+	if strRes.GetRc() != ZOK {
+		t.Error("Fails to create a path")
+	}
+
+	strRes = h.Create(path + "/a", value, ZOO_OPEN_ACLS, 0)
+	if strRes.GetRc() != ZOK {
+		t.Error("Fails to create a path")
+	}
+
+	strRes = h.Create(path + "/b", value, ZOO_OPEN_ACLS, 0)
+	if strRes.GetRc() != ZOK {
+		t.Error("Fails to create a path")
+	}
+
+	// Verify GetChildren() is correct.
+	stringsRes := h.GetChildren(path)
+	if stringsRes.GetRc() != ZOK {
+		t.Error("Fails to call GetChildren")
+	}
+	strings := stringsRes.GetStrings()
+	if len(strings) != 2 {
+		t.Error("Has number of strings: ", len(strings))
 	}
 }
