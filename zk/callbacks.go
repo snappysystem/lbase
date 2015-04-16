@@ -21,10 +21,19 @@ func GoVoidCompletion(rc C.int, data unsafe.Pointer) {
 func GoStatCompletion(rc C.int, vstat unsafe.Pointer, data unsafe.Pointer) {
 	stat := (*C.struct_Stat)(vstat)
 	ch := (*chan StatResult)(data)
-	result := StatResult{
-		rc : rc,
-		stat : *stat,
+
+	var result StatResult
+	if stat != nil {
+		result = StatResult{
+			rc : rc,
+			stat : *stat,
+		}
+	} else {
+		result = StatResult{
+			rc : rc,
+		}
 	}
+
 	(*ch) <-result
 }
 
@@ -36,10 +45,21 @@ func GoDataCompletion(
 	stat, data unsafe.Pointer) {
 
 	ch := (*chan DataResult)(data)
-	result := DataResult{
-		rc: rc,
-		data: C.GoBytes(value, value_len),
-		stat: *(*C.struct_Stat)(stat),
+	var result DataResult
+	if value != nil && stat != nil {
+		result = DataResult{
+			rc: rc,
+			data: C.GoBytes(value, value_len),
+			stat: *(*C.struct_Stat)(stat),
+		}
+	} else {
+		result.rc = rc
+		if value != nil {
+			result.data = C.GoBytes(value, value_len)
+		}
+		if stat != nil {
+			result.stat = *(*C.struct_Stat)(stat)
+		}
 	}
 
 	(*ch) <-result
@@ -50,6 +70,11 @@ func GoStringsCompletion(rc C.int, strings, data unsafe.Pointer) {
 	ch := (*chan StringsResult)(data)
 	strVec := (*C.struct_String_vector)(strings)
 	strs := make([]string, 0, strVec.count)
+
+	if strings == nil {
+		(*ch) <-StringsResult{rc: rc}
+		return
+	}
 
 	// Simulate a go slice.
 	ppvHdr := reflect.SliceHeader{
@@ -75,70 +100,100 @@ func GoStringsCompletion(rc C.int, strings, data unsafe.Pointer) {
 func GoStringsStatCompletion(rc C.int, strings, stat, data unsafe.Pointer) {
 	ch := (*chan StringsStatResult)(data)
 	strVec := (*C.struct_String_vector)(strings)
-	strs := make([]string, 0, strVec.count)
+	var strs []string
 
-	// Simulate a go slice.
-	ppvHdr := reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(strVec.data)),
-		Len: int(strVec.count),
-		Cap: int(strVec.count),
-	}
-	goSlice := *(*[]unsafe.Pointer)(unsafe.Pointer(&ppvHdr))
+	if strings != nil {
+		// Simulate a go slice.
+		strs := make([]string, 0, strVec.count)
+		ppvHdr := reflect.SliceHeader{
+			Data: uintptr(unsafe.Pointer(strVec.data)),
+			Len: int(strVec.count),
+			Cap: int(strVec.count),
+		}
+		goSlice := *(*[]unsafe.Pointer)(unsafe.Pointer(&ppvHdr))
 
-	for _,s := range goSlice {
-		strs = append(strs, C.GoString((*C.char)(s)))
-	}
-
-	result := StringsStatResult{
-		rc: rc,
-		strings: strs,
-		stat: *(*C.struct_Stat)(stat),
+		for _,s := range goSlice {
+			strs = append(strs, C.GoString((*C.char)(s)))
+		}
 	}
 
-	(*ch) <-result
+	if stat != nil {
+		result := StringsStatResult{
+			rc: rc,
+			strings: strs,
+			stat: *(*C.struct_Stat)(stat),
+		}
+
+		(*ch) <-result
+	} else {
+		result := StringsStatResult{
+			rc: rc,
+			strings: strs,
+		}
+
+		(*ch) <-result
+	}
 }
 
 //export GoStringCompletion
 func GoStringCompletion(rc C.int, value, data unsafe.Pointer) {
 	ch := (*chan StringResult)(data)
-	result := StringResult{
-		rc: rc,
-		str: C.GoString((*C.char)(value)),
-	}
+	if value != nil {
+		result := StringResult{
+			rc: rc,
+			str: C.GoString((*C.char)(value)),
+		}
 
-	(*ch) <-result
+		(*ch) <-result
+	} else {
+		result := StringResult{ rc: rc, }
+		(*ch) <-result
+	}
 }
 
 //export GoACLCompletion
 func GoACLCompletion(rc C.int, aclVec, stat, data unsafe.Pointer) {
 	ch := (*chan ACLResult)(data)
-	aclCVec := (*C.struct_ACL_vector)(aclVec)
-	goACLs := make([]ACL, 0, aclCVec.count)
+	var goACLs []ACL
 
-	// Simulate a go slice.
-	ppvHdr := reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(aclCVec.data)),
-		Len: int(aclCVec.count),
-		Cap: int(aclCVec.count),
-	}
-	goSlice := *(*[]C.struct_ACL)(unsafe.Pointer(&ppvHdr))
+	if aclVec != nil {
+		aclCVec := (*C.struct_ACL_vector)(aclVec)
+		goACLs := make([]ACL, 0, aclCVec.count)
 
-	for _,s := range goSlice {
-		acl := ACL{
-			Perms: int(s.perms),
-			Scheme: C.GoString(s.id.scheme),
-			Id: C.GoString(s.id.id),
+		// Simulate a go slice.
+		ppvHdr := reflect.SliceHeader{
+			Data: uintptr(unsafe.Pointer(aclCVec.data)),
+			Len: int(aclCVec.count),
+			Cap: int(aclCVec.count),
 		}
-		goACLs = append(goACLs, acl)
+		goSlice := *(*[]C.struct_ACL)(unsafe.Pointer(&ppvHdr))
+
+		for _,s := range goSlice {
+			acl := ACL{
+				Perms: int(s.perms),
+				Scheme: C.GoString(s.id.scheme),
+				Id: C.GoString(s.id.id),
+			}
+			goACLs = append(goACLs, acl)
+		}
 	}
 
-	result := ACLResult{
-		rc: rc,
-		acls: goACLs,
-		stat: *(*C.struct_Stat)(stat),
-	}
+	if stat != nil {
+		result := ACLResult{
+			rc: rc,
+			acls: goACLs,
+			stat: *(*C.struct_Stat)(stat),
+		}
 
-	(*ch) <-result
+		(*ch) <-result
+	} else {
+		result := ACLResult{
+			rc: rc,
+			acls: goACLs,
+		}
+
+		(*ch) <-result
+	}
 }
 
 //export GoWatcher
