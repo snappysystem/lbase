@@ -26,7 +26,8 @@ func (h WeightHeap) Swap(i, j int) {
 
 func (h WeightHeap) Less(i, j int) bool {
 	// Priority queue pops the smallest value.
-	return h[i].count < h[j].count
+	// Use "greater than" here to get the largest value.
+	return h[i].count > h[j].count
 }
 
 func (h *WeightHeap) Push(x interface{}) {
@@ -67,6 +68,8 @@ type DefaultBalancer struct {
 	perRackQueue map[string]WeightHeap
 	// How many servers form a region.
 	numReplicas int
+	// The maximum number of regions that a server can handle.
+	maxRegionsPerServer int
 	// Various options for the balancer.
 	opts *BalancerOptions
 }
@@ -81,6 +84,7 @@ func NewDefaultBalancer(opts *BalancerOptions, servers []ServerName) *DefaultBal
 		opts:         opts,
 	}
 
+	rackMap := make(map[string]int)
 	for _, s := range servers {
 		// Populate server map.
 		b.serverMap[s] = []Region{}
@@ -92,17 +96,20 @@ func NewDefaultBalancer(opts *BalancerOptions, servers []ServerName) *DefaultBal
 
 		// Populate globalQueue
 		r := b.opts.RackManager.GetRack(s.Host)
-		_, found := b.perRackQueue[r]
-		if !found {
-			w := Weight{value: r, count: 0}
-			b.globalQueue = append(b.globalQueue, w)
-		}
+		count := rackMap[r]
+		count = count + b.maxRegionsPerServer
+		rackMap[r] = count
 
 		// Populate per rack queue.
 		h := b.perRackQueue[r]
-		w := Weight{value: s.Host, count: 0}
+		w := Weight{value: s.Host, count: b.maxRegionsPerServer}
 		h = append(h, w)
 		b.perRackQueue[r] = h
+	}
+
+	for r, cnt := range rackMap {
+		w := Weight{value: r, count: cnt}
+		b.globalQueue = append(b.globalQueue, w)
 	}
 
 	heap.Init(&b.globalQueue)
@@ -166,7 +173,7 @@ func (b *DefaultBalancer) UpdateServerStats(
 	for server, regions := range b.serverMap {
 		rack := b.opts.RackManager.GetRack(server.Host)
 		cnt := rackMap[rack]
-		delta := len(regions)
+		delta := b.maxRegionsPerServer - len(regions)
 		cnt = cnt + delta
 		rackMap[rack] = cnt
 
@@ -226,7 +233,7 @@ func (b *DefaultBalancer) UpdateServerStats(
 
 			// Adjust per rack counter.
 			w := heap.Pop(&q).(Weight)
-			w.count = w.count + 1
+			w.count = w.count - 1
 			heap.Push(&q, w)
 			b.perRackQueue[r] = q
 
@@ -245,9 +252,9 @@ func (b *DefaultBalancer) UpdateServerStats(
 		for _, rack := range racks {
 			cnt, found := rackCountMap[rack.value]
 			if !found {
-				rackCountMap[rack.value] = rack.count + 1
+				rackCountMap[rack.value] = rack.count - 1
 			} else {
-				rackCountMap[rack.value] = cnt + 1
+				rackCountMap[rack.value] = cnt - 1
 			}
 		}
 		for name, cnt := range rackCountMap {
@@ -345,18 +352,19 @@ func (b *DefaultBalancer) ReportNewServers(servers []ServerName) {
 		}
 
 		rack := b.opts.RackManager.GetRack(s.Host)
+		w := Weight{value: s.Host, count: b.maxRegionsPerServer}
 		var q WeightHeap
-		q, found = b.perRackQueue[rack]
 
-		w := Weight{value: s.Host, count: 0}
+		q, found = b.perRackQueue[rack]
 		if !found {
 			q = append(q, w)
 			heap.Init(&q)
 			// Update global queue as well.
-			w2 := Weight{value: rack, count: 0}
+			w2 := Weight{value: rack, count: b.maxRegionsPerServer}
 			heap.Push(&b.globalQueue, w2)
 		} else {
 			heap.Push(&q, w)
+			b.globalQueue.Update(rack, b.maxRegionsPerServer)
 		}
 		b.perRackQueue[rack] = q
 	}
@@ -404,7 +412,7 @@ func (b *DefaultBalancer) SplitRegion(origin, left, right Region) bool {
 		rack := b.opts.RackManager.GetRack(s.Host)
 		for i := 0; i < len(b.globalQueue); i++ {
 			if b.globalQueue[i].value == rack {
-				b.globalQueue[i].count = b.globalQueue[i].count + 1
+				b.globalQueue[i].count = b.globalQueue[i].count - 1
 				heap.Fix(&b.globalQueue, i)
 				break
 			}
@@ -416,7 +424,7 @@ func (b *DefaultBalancer) SplitRegion(origin, left, right Region) bool {
 		}
 		for i := 0; i < len(q); i++ {
 			if q[i].value == s.Host {
-				q[i].count = q[i].count + 1
+				q[i].count = q[i].count - 1
 				heap.Fix(&q, i)
 				break
 			}
@@ -483,7 +491,7 @@ func (b *DefaultBalancer) MergeRegions(left, right, light Region) {
 		rack := b.opts.RackManager.GetRack(s.Host)
 		for i := 0; i < len(b.globalQueue); i++ {
 			if b.globalQueue[i].value == rack {
-				b.globalQueue[i].count = b.globalQueue[i].count - 1
+				b.globalQueue[i].count = b.globalQueue[i].count + 1
 				heap.Fix(&b.globalQueue, i)
 				break
 			}
@@ -495,7 +503,7 @@ func (b *DefaultBalancer) MergeRegions(left, right, light Region) {
 		}
 		for i := 0; i < len(q); i++ {
 			if q[i].value == s.Host {
-				q[i].count = q[i].count - 1
+				q[i].count = q[i].count + 1
 				heap.Fix(&q, i)
 				break
 			}
