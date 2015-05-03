@@ -76,64 +76,13 @@ type DefaultBalancer struct {
 
 // Create a brand new balancer for a brand new system.
 func NewDefaultBalancer(opts *BalancerOptions, servers []ServerName) *DefaultBalancer {
-	b := &DefaultBalancer{
+	return &DefaultBalancer{
 		serverMap:    make(map[ServerName][]Region),
 		hostMap:      make(map[string][]ServerName),
 		regionMap:    make(map[Region][]ServerName),
 		perRackQueue: make(map[string]WeightHeap),
 		opts:         opts,
 	}
-
-	rackMap := make(map[string]int)
-	for _, s := range servers {
-		// Populate server map.
-		b.serverMap[s] = []Region{}
-
-		// Populate host map.
-		list := b.hostMap[s.Host]
-		list = append(list, s)
-		b.hostMap[s.Host] = list
-
-		// Populate globalQueue
-		r := b.opts.RackManager.GetRack(s.Host)
-		count := rackMap[r]
-		count = count + b.maxRegionsPerServer
-		rackMap[r] = count
-
-		// Populate per rack queue.
-		h := b.perRackQueue[r]
-		w := Weight{value: s.Host, count: b.maxRegionsPerServer}
-		h = append(h, w)
-		b.perRackQueue[r] = h
-	}
-
-	for r, cnt := range rackMap {
-		w := Weight{value: r, count: cnt}
-		b.globalQueue = append(b.globalQueue, w)
-	}
-
-	heap.Init(&b.globalQueue)
-	for _, h := range b.perRackQueue {
-		heap.Init(&h)
-	}
-
-	return b
-}
-
-// Create a new balancer that manages an existing system.
-func ReloadDefaultBalancer(
-	opts *BalancerOptions,
-	servers []ServerName,
-	regions []Region) *DefaultBalancer {
-
-	b := NewDefaultBalancer(opts, servers)
-	if b != nil {
-		for _, r := range regions {
-			b.regionMap[r] = []ServerName{}
-		}
-	}
-
-	return b
 }
 
 func (b *DefaultBalancer) UpdateServerStats(
@@ -141,22 +90,18 @@ func (b *DefaultBalancer) UpdateServerStats(
 	stats []ServerStat) {
 
 	// First clean up existing data.
-	for server, _ := range b.serverMap {
-		b.serverMap[server] = []Region{}
-	}
-
-	for region, _ := range b.regionMap {
-		b.regionMap[region] = []ServerName{}
-	}
-
+	b.serverMap = make(map[ServerName][]Region)
+	b.hostMap = make(map[string][]ServerName)
+	b.regionMap = make(map[Region][]ServerName)
 	b.globalQueue = WeightHeap{}
-	for rack, _ := range b.perRackQueue {
-		b.perRackQueue[rack] = WeightHeap{}
-	}
+	b.perRackQueue = make(map[string]WeightHeap)
 
-	// Then build server map.
+	// Then build server map and host map.
 	for _, s := range stats {
 		b.serverMap[s.ServerName] = s.Regions
+		slist := b.hostMap[s.ServerName.Host]
+		slist = append(slist, s.ServerName)
+		b.hostMap[s.ServerName.Host] = slist
 	}
 
 	// Then build the region map (reverse map).
@@ -290,83 +235,6 @@ func (b *DefaultBalancer) UpdateServerStats(
 		adds := []Region{r1}
 		var removals []Region
 		b.opts.StateManager.Commit(adds, removals)
-	}
-}
-
-func (b *DefaultBalancer) ReportOutage(server ServerName) {
-	// Find out affected regions, and update serverMap.
-	regions, found := b.serverMap[server]
-	if !found {
-		return
-	}
-	b.serverMap[server] = []Region{}
-
-	// We do not update hostMap for unavailable servers,
-	// because the outage is considered temporary.
-
-	// Update regionMap.
-	for _, r := range regions {
-		list, found := b.regionMap[r]
-		if found {
-			for i := 0; i < len(list); i++ {
-				if list[i] == server {
-					x := list[:i]
-					y := list[(i + 1):]
-					b.regionMap[r] = append(x, y...)
-				}
-			}
-		}
-	}
-
-	// Update queues.
-	rack := b.opts.RackManager.GetRack(server.Host)
-	b.globalQueue.Update(rack, -len(regions))
-
-	q, found := b.perRackQueue[rack]
-	if found {
-		q.Update(server.Host, -len(regions))
-	}
-}
-
-func (b *DefaultBalancer) ReportNewServers(servers []ServerName) {
-	// Add new servers to server map and hostMap.
-	excludes := make(map[ServerName]int)
-	for _, s := range servers {
-		_, found := b.serverMap[s]
-		if found {
-			excludes[s] = 1
-			continue
-		}
-		b.serverMap[s] = []Region{}
-
-		slist := b.hostMap[s.Host]
-		slist = append(slist, s)
-		b.hostMap[s.Host] = slist
-	}
-
-	// Update queues.
-	for _, s := range servers {
-		_, found := excludes[s]
-		if found {
-			continue
-		}
-
-		rack := b.opts.RackManager.GetRack(s.Host)
-		w := Weight{value: s.Host, count: b.maxRegionsPerServer}
-		var q WeightHeap
-
-		q, found = b.perRackQueue[rack]
-		if !found {
-			q = append(q, w)
-			heap.Init(&q)
-			// Update global queue as well.
-			w2 := Weight{value: rack, count: b.maxRegionsPerServer}
-			heap.Push(&b.globalQueue, w2)
-		} else {
-			heap.Push(&q, w)
-			b.globalQueue.Update(rack, b.maxRegionsPerServer)
-		}
-		b.perRackQueue[rack] = q
 	}
 }
 
@@ -514,6 +382,142 @@ func (b *DefaultBalancer) MergeRegions(left, right, light Region) {
 	adds := []Region{newRegion}
 	removals := []Region{left, right}
 	b.opts.StateManager.Commit(adds, removals)
+}
+
+// TODO: If all regions are balanced, there is no need to run this.
+func (b *DefaultBalancer) BalanceLoad(pendings []RegionPlacementAction) {
+	// Remember hosts that are involved in region move.
+	// For bigger deployment, we want to avoid reuse hosts that are
+	// already involved in data movements.
+	used := make(map[string]int)
+	if len(b.serverMap) > b.opts.NumServersInSmallDeployment {
+		for _, act := range pendings {
+			used[act.Dest.Host] = 1
+			if act.HasSource {
+				used[act.Source.Host] = 1
+			}
+		}
+	}
+
+	// Build a priority queue to find out the lest replicated regions.
+	boundsMap := make(map[string]string)
+	regionQueue := WeightHeap{}
+
+	for r, slist := range b.regionMap {
+		replicas := len(slist)
+		if replicas < b.opts.NumReplicas {
+			w := Weight{value: r.StartKey, count: -replicas}
+			regionQueue = append(regionQueue, w)
+			boundsMap[r.StartKey] = r.EndKey
+		}
+	}
+
+	heap.Init(&regionQueue)
+
+	for i := 0; i < b.opts.NumIterationPerBalanceRound; i++ {
+		w := heap.Pop(&regionQueue).(Weight)
+		endKey, found := boundsMap[w.value]
+		if !found {
+			panic("Fails to find end key for a range!")
+		}
+
+		r := Region{StartKey: w.value, EndKey: endKey}
+		slist, hasRegion := b.regionMap[r]
+		if !hasRegion {
+			// Maybe the region has been split or merged.
+			// Anyway it is possible that a region disappears
+			// over time. So let us look at the next candidate.
+			i--
+			continue
+		}
+
+		// Remember used hosts.
+		for _, s := range slist {
+			used[s.Host] = 1
+		}
+
+		// No racks are available, we cannot proceed.
+		if len(b.globalQueue) == 0 {
+			return
+		}
+
+		pendingRacks := make([]Weight, 0)
+		var server ServerName
+
+		for len(b.globalQueue) > 0 {
+			rackWeight := heap.Pop(&b.globalQueue).(Weight)
+			pendingRacks = append(pendingRacks, rackWeight)
+
+			q, hasQueue := b.perRackQueue[rackWeight.value]
+			if !hasQueue {
+				panic("Fails to find the queue")
+			}
+
+			pendingHosts := make([]Weight, 0)
+			for len(q) > 0 {
+				hostWeight := heap.Pop(&q).(Weight)
+				pendingHosts = append(pendingHosts, hostWeight)
+				_, hasHost := used[hostWeight.value]
+				if hasHost && (len(b.globalQueue) > 0 || len(q) > 0) {
+					continue
+				}
+
+				slist, hasServerList := b.hostMap[hostWeight.value]
+				if !hasServerList {
+					panic("Miss a host in host map!")
+				}
+				if len(slist) == 0 {
+					continue
+				}
+
+				idx := rand.Int31() % int32(len(slist))
+				server = slist[idx]
+
+				break
+			}
+
+			// If there is a candidate, adjust the last weight count.
+			if len(server.Host) > 0 {
+				last := len(pendingHosts) - 1
+				cnt := pendingHosts[last].count
+				pendingHosts[last].count = cnt - 1
+
+				last = len(pendingRacks) - 1
+				cnt = pendingRacks[last].count
+				pendingRacks[last].count = cnt - 1
+			}
+
+			// Restore per rack queue.
+			for _, hw := range pendingHosts {
+				heap.Push(&q, hw)
+			}
+			b.perRackQueue[rackWeight.value] = q
+
+			// Restore global queue.
+			for _, w := range pendingRacks {
+				heap.Push(&b.globalQueue, w)
+			}
+
+			// If we already had an allocation, break the loop.
+			if len(server.Host) > 0 {
+				used[server.Host] = 1
+				break
+			}
+		}
+
+		// If we fails to find an allocation, there is nothing we can do.
+		if len(server.Host) == 0 {
+			return
+		}
+
+		act := RegionPlacementAction{
+			Region:    r,
+			Dest:      server,
+			HasSource: false,
+		}
+
+		b.opts.PlacementManager.Placement(&act)
+	}
 }
 
 func (b *DefaultBalancer) hasSameReplications(left, right Region) bool {

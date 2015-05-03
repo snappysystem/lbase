@@ -65,32 +65,35 @@ type BalancerStateManager interface {
 
 // Options a caller can specify before creating a new balancer instance.
 type BalancerOptions struct {
-	BalancerName     string
-	NumReplicas      int
-	RackManager      RackManager
-	PlacementManager RegionPlacementManager
-	StateManager     BalancerStateManager
+	// The name of balancer.
+	BalancerName string
+
+	// How many replicas a region should have.
+	NumReplicas int
+
+	// Balancer will balance the load periodically.
+	// In each run of balancer, how many under-replicated regions
+	// the balancer should process.
+	NumIterationPerBalanceRound int
+
+	// In small deployment, certain load balancing policies will be
+	// disabled.
+	NumServersInSmallDeployment int
+
+	// Maps a host name to its corresponding rack or vice versa.
+	RackManager                 RackManager
+
+	// Communicate with region server about region placement decisions.
+	PlacementManager            RegionPlacementManager
+
+	// Communicate with persistent storage (zookeeper)
+	// to store region information.
+	StateManager                BalancerStateManager
 }
 
 type Balancer interface {
-	// Initialize a new lbase system.
-	New(servers []ServerName) bool
-
-	// Initialize an existing lbase system.
-	// @storageAssignments maps each region to the list of servers
-	// that stores the region;
-	// @primaryAssignments maps each region to its primary (the server
-	// that coordinate writes/updates).
-	Reload(servers []ServerName, regions []Region) bool
-
 	// Update server's load and status.
 	UpdateServerStats(timestamp int64, stats []ServerStat)
-
-	// Report that a server is not reachable.
-	ReportOutage(server ServerName)
-
-	// Report new servers are added.
-	ReportNewServers(servers []ServerName)
 
 	// Split a region into two new regions.
 	SplitRegion(origin, left, right Region) bool
@@ -98,4 +101,9 @@ type Balancer interface {
 	// Merge two regions @left, and @right together.
 	// @light indicate which region has less load.
 	MergeRegions(left, right, light Region)
+
+	// Find under-replicated regions and coordinate the replication
+	// process. This method takes a list of currently pending
+	// moving operations.
+	BalanceLoad(pendings []RegionPlacementAction)
 }
