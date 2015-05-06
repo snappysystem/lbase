@@ -66,10 +66,6 @@ type DefaultBalancer struct {
 	globalQueue WeightHeap
 	// Use this priority queue to pick best host within a rack.
 	perRackQueue map[string]WeightHeap
-	// How many servers form a region.
-	numReplicas int
-	// The maximum number of regions that a server can handle.
-	maxRegionsPerServer int
 	// Various options for the balancer.
 	opts *BalancerOptions
 }
@@ -85,9 +81,7 @@ func NewDefaultBalancer(opts *BalancerOptions, servers []ServerName) *DefaultBal
 	}
 }
 
-func (b *DefaultBalancer) UpdateServerStats(
-	timestamp int64,
-	stats []ServerStat) {
+func (b *DefaultBalancer) UpdateServerStats(timestamp int64, stats []ServerStat) {
 
 	// First clean up existing data.
 	b.serverMap = make(map[ServerName][]Region)
@@ -118,7 +112,7 @@ func (b *DefaultBalancer) UpdateServerStats(
 	for server, regions := range b.serverMap {
 		rack := b.opts.RackManager.GetRack(server.Host)
 		cnt := rackMap[rack]
-		delta := b.maxRegionsPerServer - len(regions)
+		delta := b.opts.MaxRegionsPerServer - len(regions)
 		cnt = cnt + delta
 		rackMap[rack] = cnt
 
@@ -144,8 +138,8 @@ func (b *DefaultBalancer) UpdateServerStats(
 	// Create the first region if we have not done so yet.
 	if len(b.regionMap) == 0 {
 		// First pick N replicas from different racks.
-		racks := make([]Weight, b.numReplicas)
-		for i := 0; i < b.numReplicas; i++ {
+		racks := make([]Weight, b.opts.NumReplicas)
+		for i := 0; i < b.opts.NumReplicas; i++ {
 			if len(b.globalQueue) > 0 {
 				tmp := heap.Pop(&b.globalQueue)
 				racks[i] = tmp.(Weight)
@@ -168,8 +162,8 @@ func (b *DefaultBalancer) UpdateServerStats(
 		}
 
 		// Then pick a server from each of rack.
-		servers := make([]ServerName, b.numReplicas)
-		for i := 0; i < b.numReplicas; i++ {
+		servers := make([]ServerName, b.opts.NumReplicas)
+		for i := 0; i < b.opts.NumReplicas; i++ {
 			r := racks[i].value
 			q, found := b.perRackQueue[r]
 			if !found {
@@ -189,7 +183,7 @@ func (b *DefaultBalancer) UpdateServerStats(
 				panic("Miss a host in host map!")
 			}
 			idx := rand.Int31() % int32(len(slist))
-			servers = append(servers, slist[idx])
+			servers[i] = slist[idx]
 		}
 
 		// Adjust globalQueue weights.

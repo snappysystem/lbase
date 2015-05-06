@@ -71,6 +71,9 @@ type BalancerOptions struct {
 	// How many replicas a region should have.
 	NumReplicas int
 
+	// The maximum number of regions that a server can handle.
+	MaxRegionsPerServer int
+
 	// Balancer will balance the load periodically.
 	// In each run of balancer, how many under-replicated regions
 	// the balancer should process.

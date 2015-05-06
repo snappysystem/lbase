@@ -81,6 +81,7 @@ func DefaultBalancerForTest(serverMap map[ServerName]string) *DefaultBalancer {
 	opts := BalancerOptions{
 		BalancerName:                "testBalancer",
 		NumReplicas:                 3,
+		MaxRegionsPerServer:         10,
 		NumIterationPerBalanceRound: 3,
 		NumServersInSmallDeployment: 6,
 		RackManager:                 NewMappedRackManager(hostMap),
@@ -120,5 +121,22 @@ func TestDefaultBalancerInitialStats(t *testing.T) {
 	// Verify that the first region has been created after first stats.
 	if len(b.regionMap) != 1 {
 		t.Error("length of region map should be 1!")
+	}
+
+	// Verify that 3 replicas has been assigned to the region.
+	hosts := make(map[string]int)
+	for _, slist := range b.regionMap {
+		for _, s := range slist {
+			hosts[s.Host] = 1
+		}
+	}
+	if len(hosts) != 3 {
+		t.Error("Fails to find 3 replicas!", len(hosts))
+	}
+
+	// Verify that there are 3 placement actions.
+	pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
+	if len(pm.actions) != 3 {
+		t.Error("Expect no placement action")
 	}
 }
