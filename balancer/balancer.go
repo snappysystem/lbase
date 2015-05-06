@@ -40,7 +40,7 @@ type ServerStat struct {
 }
 
 // Region placement assigns vacant servers to under-replicated region.
-type RegionPlacementAction struct {
+type PlacementAction struct {
 	Region
 	Source    ServerName
 	Dest      ServerName
@@ -49,8 +49,8 @@ type RegionPlacementAction struct {
 }
 
 // An interface that handles RPCs from balancer to servers.
-type RegionPlacementManager interface {
-	Placement(task *RegionPlacementAction)
+type PlacementManager interface {
+	Place(task *PlacementAction)
 }
 
 // Save region changes persistently.
@@ -59,7 +59,7 @@ type RegionPlacementManager interface {
 // the initiating storage server monitors coresponding zookeeper region
 // keys. If the keys are changed, the storage servers will further
 // investigate if a region change (split or merge) has occured.
-type BalancerStateManager interface {
+type StateManager interface {
 	Commit(adds []Region, removals []Region)
 }
 
@@ -81,14 +81,14 @@ type BalancerOptions struct {
 	NumServersInSmallDeployment int
 
 	// Maps a host name to its corresponding rack or vice versa.
-	RackManager                 RackManager
+	RackManager RackManager
 
 	// Communicate with region server about region placement decisions.
-	PlacementManager            RegionPlacementManager
+	PlacementManager PlacementManager
 
 	// Communicate with persistent storage (zookeeper)
 	// to store region information.
-	StateManager                BalancerStateManager
+	StateManager StateManager
 }
 
 type Balancer interface {
@@ -105,5 +105,5 @@ type Balancer interface {
 	// Find under-replicated regions and coordinate the replication
 	// process. This method takes a list of currently pending
 	// moving operations.
-	BalanceLoad(pendings []RegionPlacementAction)
+	BalanceLoad(pendings []PlacementAction)
 }

@@ -223,12 +223,12 @@ func (b *DefaultBalancer) UpdateServerStats(
 
 		// Notify servers of the change.
 		for _, s := range servers {
-			act := RegionPlacementAction{
+			act := PlacementAction{
 				Region:    r1,
 				Dest:      s,
 				HasSource: false,
 			}
-			b.opts.PlacementManager.Placement(&act)
+			b.opts.PlacementManager.Place(&act)
 		}
 
 		// Save change permanently.
@@ -385,7 +385,7 @@ func (b *DefaultBalancer) MergeRegions(left, right, light Region) {
 }
 
 // TODO: If all regions are balanced, there is no need to run this.
-func (b *DefaultBalancer) BalanceLoad(pendings []RegionPlacementAction) {
+func (b *DefaultBalancer) BalanceLoad(pendings []PlacementAction) {
 	// Remember hosts that are involved in region move.
 	// For bigger deployment, we want to avoid reuse hosts that are
 	// already involved in data movements.
@@ -510,13 +510,13 @@ func (b *DefaultBalancer) BalanceLoad(pendings []RegionPlacementAction) {
 			return
 		}
 
-		act := RegionPlacementAction{
+		act := PlacementAction{
 			Region:    r,
 			Dest:      server,
 			HasSource: false,
 		}
 
-		b.opts.PlacementManager.Placement(&act)
+		b.opts.PlacementManager.Place(&act)
 	}
 }
 
@@ -590,12 +590,12 @@ func (b *DefaultBalancer) moveRegionForMerge(left, right, light Region) {
 
 	// Send move instruction.
 	for i := 0; i < len(biggerList); i++ {
-		act := RegionPlacementAction{
+		act := PlacementAction{
 			Region:    *smaller,
 			Source:    smallerList[i],
 			Dest:      biggerList[i],
 			HasSource: true,
 		}
-		b.opts.PlacementManager.Placement(&act)
+		b.opts.PlacementManager.Place(&act)
 	}
 }
