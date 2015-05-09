@@ -83,7 +83,7 @@ func DefaultBalancerForTest(serverMap map[ServerName]string) *DefaultBalancer {
 		NumReplicas:                 3,
 		MaxRegionsPerServer:         10,
 		NumIterationPerBalanceRound: 3,
-		NumServersInSmallDeployment: 6,
+		NumServersInSmallDeployment: 3,
 		RackManager:                 NewMappedRackManager(hostMap),
 		PlacementManager:            NewPassThroughPlacementManager(),
 		StateManager:                NewPassThroughStateManager(),
@@ -138,5 +138,158 @@ func TestDefaultBalancerInitialStats(t *testing.T) {
 	pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
 	if len(pm.actions) != 3 {
 		t.Error("Expect no placement action")
+	}
+}
+
+func TestDefaultBalancerHostChoice(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a", Port: 1000}] = "1"
+	serverMap[ServerName{Host: "a", Port: 1001}] = "1"
+	serverMap[ServerName{Host: "a", Port: 1002}] = "1"
+	serverMap[ServerName{Host: "b"}] = "1"
+	serverMap[ServerName{Host: "c"}] = "1"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+		}
+		stats = append(stats, stat)
+	}
+
+	// Verify that no region has been created before first stat.
+	if len(b.regionMap) != 0 {
+		t.Error("There should be no region yet!")
+	}
+
+	b.UpdateServerStats(1, stats)
+
+	// Verify that 3 replicas has been assigned to the region.
+	hosts := make(map[string]int)
+	for _, slist := range b.regionMap {
+		for _, s := range slist {
+			hosts[s.Host] = 1
+		}
+	}
+	if len(hosts) != 3 {
+		t.Error("Fails to find 3 replicas!", len(hosts))
+	}
+
+	// Verify that "d" and "e" have been assigned.
+	expected := []string{"b", "c"}
+	for _,e := range expected {
+		_, found := hosts[e]
+		if !found {
+			t.Error("Fails to find host ", e)
+		}
+	}
+}
+
+func TestDefaultBalancerRackChoice(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a"}] = "1"
+	serverMap[ServerName{Host: "b"}] = "1"
+	serverMap[ServerName{Host: "c"}] = "1"
+	serverMap[ServerName{Host: "d"}] = "2"
+	serverMap[ServerName{Host: "e"}] = "3"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+		}
+		stats = append(stats, stat)
+	}
+
+	// Verify that no region has been created before first stat.
+	if len(b.regionMap) != 0 {
+		t.Error("There should be no region yet!")
+	}
+
+	b.UpdateServerStats(1, stats)
+
+	// Verify that 3 replicas has been assigned to the region.
+	hosts := make(map[string]int)
+	for _, slist := range b.regionMap {
+		for _, s := range slist {
+			hosts[s.Host] = 1
+		}
+	}
+	if len(hosts) != 3 {
+		t.Error("Fails to find 3 replicas!", len(hosts))
+	}
+
+	// Verify that "d" and "e" have been assigned.
+	expected := []string{"d", "e"}
+	for _,e := range expected {
+		_, found := hosts[e]
+		if !found {
+			t.Error("Fails to find host ", e)
+		}
+	}
+}
+
+func TestDefaultBalancerInitialSplit(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a"}] = "r"
+	serverMap[ServerName{Host: "b"}] = "r"
+	serverMap[ServerName{Host: "c"}] = "r"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+		}
+		stats = append(stats, stat)
+	}
+
+	// Verify that no region has been created before first stat.
+	if len(b.regionMap) != 0 {
+		t.Error("There should be no region yet!")
+	}
+
+	b.UpdateServerStats(1, stats)
+
+	// Clean up pass through objects.
+	pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
+	sm := b.opts.StateManager.(*PassThroughStateManager)
+	pm.actions = pm.actions[:0]
+	sm.adds = sm.adds[:0]
+	sm.removals = sm.removals[:0]
+
+	// Now split the region.
+	left := Region{EndKey: "hello"}
+	right := Region{StartKey: "hello"}
+	ok := b.SplitRegion(Region{}, left, right)
+
+	if !ok {
+		t.Error("Fails to split the region")
+	}
+
+	// Verify adds and removals actions.
+	if len(sm.adds) != 1 || len(sm.removals) != 1 {
+		t.Error("should have some activity in sm!")
+	} else if len(sm.adds[0]) != 2 || len(sm.removals[0]) != 1 {
+		t.Error("Not exact adds and removals!")
+	}
+
+	// Verify that balancer does not contact storage servers directly.
+	if len(pm.actions) != 0 {
+		t.Error("Does not expect activities on storage servers")
 	}
 }

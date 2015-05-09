@@ -109,6 +109,8 @@ func (b *DefaultBalancer) UpdateServerStats(timestamp int64, stats []ServerStat)
 
 	// Build global and per rack queue.
 	rackMap := make(map[string]int)
+	knownHostMap := make(map[string]int)
+
 	for server, regions := range b.serverMap {
 		rack := b.opts.RackManager.GetRack(server.Host)
 		cnt := rackMap[rack]
@@ -116,10 +118,14 @@ func (b *DefaultBalancer) UpdateServerStats(timestamp int64, stats []ServerStat)
 		cnt = cnt + delta
 		rackMap[rack] = cnt
 
-		queue := b.perRackQueue[rack]
-		w := Weight{value: server.Host, count: delta}
-		queue = append(queue, w)
-		b.perRackQueue[rack] = queue
+		_,hostAlreadyKnown := knownHostMap[server.Host]
+		if !hostAlreadyKnown {
+			knownHostMap[server.Host] = 1
+			queue := b.perRackQueue[rack]
+			w := Weight{value: server.Host, count: delta}
+			queue = append(queue, w)
+			b.perRackQueue[rack] = queue
+		}
 	}
 
 	// Finalize the queues.
