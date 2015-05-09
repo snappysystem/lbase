@@ -118,7 +118,7 @@ func (b *DefaultBalancer) UpdateServerStats(timestamp int64, stats []ServerStat)
 		cnt = cnt + delta
 		rackMap[rack] = cnt
 
-		_,hostAlreadyKnown := knownHostMap[server.Host]
+		_, hostAlreadyKnown := knownHostMap[server.Host]
 		if !hostAlreadyKnown {
 			knownHostMap[server.Host] = 1
 			queue := b.perRackQueue[rack]

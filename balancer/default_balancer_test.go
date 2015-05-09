@@ -1,6 +1,7 @@
 package balancer
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -182,7 +183,7 @@ func TestDefaultBalancerHostChoice(t *testing.T) {
 
 	// Verify that "d" and "e" have been assigned.
 	expected := []string{"b", "c"}
-	for _,e := range expected {
+	for _, e := range expected {
 		_, found := hosts[e]
 		if !found {
 			t.Error("Fails to find host ", e)
@@ -231,7 +232,7 @@ func TestDefaultBalancerRackChoice(t *testing.T) {
 
 	// Verify that "d" and "e" have been assigned.
 	expected := []string{"d", "e"}
-	for _,e := range expected {
+	for _, e := range expected {
 		_, found := hosts[e]
 		if !found {
 			t.Error("Fails to find host ", e)
@@ -291,5 +292,114 @@ func TestDefaultBalancerInitialSplit(t *testing.T) {
 	// Verify that balancer does not contact storage servers directly.
 	if len(pm.actions) != 0 {
 		t.Error("Does not expect activities on storage servers")
+	}
+}
+
+func TestDefaultBalancerMultiSplit(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a"}] = "r"
+	serverMap[ServerName{Host: "b"}] = "r"
+	serverMap[ServerName{Host: "c"}] = "r"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+		}
+		stats = append(stats, stat)
+	}
+
+	b.UpdateServerStats(1, stats)
+
+	for i := 10; i < 20; i++ {
+		endKey := ""
+		midKey := fmt.Sprintf("%d", i)
+
+		var preKey string
+		if i != 10 {
+			preKey = fmt.Sprintf("%d", i-1)
+		}
+
+		// Clean up pass through objects.
+		pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
+		sm := b.opts.StateManager.(*PassThroughStateManager)
+		pm.actions = pm.actions[:0]
+		sm.adds = sm.adds[:0]
+		sm.removals = sm.removals[:0]
+
+		// Now split the region.
+		left := Region{StartKey: preKey, EndKey: midKey}
+		right := Region{StartKey: midKey, EndKey: endKey}
+		orig := Region{StartKey: preKey, EndKey: endKey}
+		ok := b.SplitRegion(orig, left, right)
+
+		if !ok {
+			t.Error("Fails to split the region")
+		}
+
+		// Verify adds and removals actions.
+		if len(sm.adds) != 1 || len(sm.removals) != 1 {
+			t.Error("should have some activity in sm!")
+		} else if len(sm.adds[0]) != 2 || len(sm.removals[0]) != 1 {
+			t.Error("Not exact adds and removals!")
+		}
+
+		// Verify that balancer does not contact storage servers directly.
+		if len(pm.actions) != 0 {
+			t.Error("Does not expect activities on storage servers")
+		}
+	}
+}
+
+func TestDefaultBalancerSameReplicationGroupMerge(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a"}] = "r"
+	serverMap[ServerName{Host: "b"}] = "r"
+	serverMap[ServerName{Host: "c"}] = "r"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+		}
+		stats = append(stats, stat)
+	}
+
+	b.UpdateServerStats(1, stats)
+
+	// Now split the region.
+	left := Region{EndKey: "hello"}
+	right := Region{StartKey: "hello"}
+	ok := b.SplitRegion(Region{}, left, right)
+	if !ok {
+		t.Error("Fails to split the region")
+	}
+
+	// Clean up pass through objects.
+	pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
+	sm := b.opts.StateManager.(*PassThroughStateManager)
+	pm.actions = pm.actions[:0]
+	sm.adds = sm.adds[:0]
+	sm.removals = sm.removals[:0]
+
+	// Now merge region.
+	light := left
+	b.MergeRegions(left, right, light)
+
+	// Verify adds and removals actions.
+	if len(sm.adds) != 1 || len(sm.removals) != 1 {
+		t.Error("should have some activity in sm!")
+	} else if len(sm.adds[0]) != 1 || len(sm.removals[0]) != 2 {
+		t.Error("Not exact adds and removals!")
 	}
 }
