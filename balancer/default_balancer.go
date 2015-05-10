@@ -82,7 +82,6 @@ func NewDefaultBalancer(opts *BalancerOptions, servers []ServerName) *DefaultBal
 }
 
 func (b *DefaultBalancer) UpdateServerStats(timestamp int64, stats []ServerStat) {
-
 	// First clean up existing data.
 	b.serverMap = make(map[ServerName][]Region)
 	b.hostMap = make(map[string][]ServerName)
@@ -415,6 +414,12 @@ func (b *DefaultBalancer) BalanceLoad(pendings []PlacementAction) {
 	heap.Init(&regionQueue)
 
 	for i := 0; i < b.opts.NumIterationPerBalanceRound; i++ {
+		// If there is no candidates, just quit.
+		if len(regionQueue) == 0 {
+			break
+		}
+
+		// Find the most under-replicated region.
 		w := heap.Pop(&regionQueue).(Weight)
 		endKey, found := boundsMap[w.value]
 		if !found {

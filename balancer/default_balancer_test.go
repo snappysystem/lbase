@@ -39,15 +39,52 @@ func (rm *MappedRackManager) GetServers(rack string) []string {
 
 // A PlacementManager for testing.
 type PassThroughPlacementManager struct {
-	actions []*PlacementAction
+	actions   []*PlacementAction
+	serverMap map[ServerName][]Region
 }
 
 func NewPassThroughPlacementManager() *PassThroughPlacementManager {
-	return &PassThroughPlacementManager{}
+	return &PassThroughPlacementManager{
+		serverMap: make(map[ServerName][]Region),
+	}
 }
 
 func (pm *PassThroughPlacementManager) Place(task *PlacementAction) {
 	pm.actions = append(pm.actions, task)
+	// Remove the region from source server.
+	if task.HasSource {
+		rlist := pm.serverMap[task.Source]
+		for idx, r := range rlist {
+			if r == task.Region {
+				rlist = append(rlist[:idx], rlist[idx+1:]...)
+				break
+			}
+		}
+		pm.serverMap[task.Source] = rlist
+	}
+	// Add the region to dest server.
+	{
+		rlist := pm.serverMap[task.Dest]
+		found := false
+		for _, r := range rlist {
+			if r == task.Region {
+				found = true
+				break
+			}
+		}
+		if !found {
+			rlist = append(rlist, task.Region)
+		}
+		pm.serverMap[task.Source] = rlist
+	}
+}
+
+func (pm *PassThroughPlacementManager) CloneServerMap() map[ServerName][]Region {
+	ret := make(map[ServerName][]Region)
+	for k, v := range pm.serverMap {
+		ret[k] = v
+	}
+	return ret
 }
 
 // A StateManager for testing.
@@ -401,5 +438,63 @@ func TestDefaultBalancerSameReplicationGroupMerge(t *testing.T) {
 		t.Error("should have some activity in sm!")
 	} else if len(sm.adds[0]) != 1 || len(sm.removals[0]) != 2 {
 		t.Error("Not exact adds and removals!")
+	}
+}
+
+func TestDefaultBalancerBalancingWithoutPendingMove(t *testing.T) {
+	// Setup servers in the test.
+	serverMap := make(map[ServerName]string)
+
+	serverMap[ServerName{Host: "a"}] = "1"
+	serverMap[ServerName{Host: "b"}] = "2"
+	serverMap[ServerName{Host: "c"}] = "3"
+	serverMap[ServerName{Host: "d"}] = "4"
+
+	b := DefaultBalancerForTest(serverMap)
+
+	// Prepare first stat results (without server "d")
+	stats := make([]ServerStat, 0)
+	for s, _ := range serverMap {
+		if s.Host != "d" {
+			stat := ServerStat{
+				ServerName:  s,
+				UpTimestamp: 1,
+			}
+			stats = append(stats, stat)
+		}
+	}
+
+	// Create the first region.
+	b.UpdateServerStats(1, stats)
+
+	// Prepare second stat results: remove host "c", and add host "d".
+	pm := b.opts.PlacementManager.(*PassThroughPlacementManager)
+	servers := pm.CloneServerMap()
+	delete(servers, ServerName{Host: "c"})
+	servers[ServerName{Host: "d"}] = []Region{}
+
+	stats = stats[:0]
+	for s, rlist := range servers {
+		stat := ServerStat{
+			ServerName:  s,
+			UpTimestamp: 1,
+			Regions:     rlist,
+		}
+		stats = append(stats, stat)
+	}
+
+	b.UpdateServerStats(2, stats)
+
+	// Clean up pass through objects.
+	sm := b.opts.StateManager.(*PassThroughStateManager)
+	pm.actions = pm.actions[:0]
+	sm.adds = sm.adds[:0]
+	sm.removals = sm.removals[:0]
+
+	b.BalanceLoad([]PlacementAction{})
+
+	// Verify that balancer does contact storage servers directly.
+	if len(pm.actions) != 1 && pm.actions[0].Dest.Host != "d" {
+		t.Error("Expect activities on storage servers")
 	}
 }
