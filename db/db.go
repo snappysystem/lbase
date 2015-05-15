@@ -1,8 +1,8 @@
 package db
 
 /*
-#cgo CFLAGS: -I../leveldb
-#cgo LDFLAGS: -L../leveldb -lleveldb
+#cgo CFLAGS: -I../externals/leveldb
+#cgo LDFLAGS: -L../externals/leveldb -lleveldb
 
 #include "include/leveldb/c.h"
 #include <stdlib.h>
