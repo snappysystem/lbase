@@ -1,8 +1,14 @@
 package db
 
+// NOTE: cgo does not support LDFLAGS:-static very well.
+// So the best way to build dependent library (i.e. leveldb)
+// is to use "make libleveldb.a" instead of "make".
+// The former only build a static library and force cgo
+// to use that static library.
+
 /*
 #cgo CFLAGS: -I../externals/leveldb
-#cgo LDFLAGS: -L../externals/leveldb -lleveldb
+#cgo LDFLAGS: -L../externals/leveldb -lleveldb -lstdc++
 
 #include "include/leveldb/c.h"
 #include <stdlib.h>
