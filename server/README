@@ -1,0 +1,15 @@
+Quorum Protocol:
+
+(1) A quorum consists of (2N+1) servers;
+(2) The (2N+1) servers run Raft protocol and has a master server M;
+(3) Each server i can append new record to a log file, and assign
+    that record a consecutive sequence number S[i]. On each server,
+    the sequence number is monitonically increasing.
+
+During write:
+(1) A writer appends a record R to P servers where (P >= N + 1);
+(2) The master server M is periodically polling new records from other
+    servers. It will find out that record R has P (P >= N + 1) occurance
+    and should be committed.
+(3) The master M committed R through Raft protocol, along with
+    the latest sequence numbers on each of the server {S[0], ..., S[2N]}
