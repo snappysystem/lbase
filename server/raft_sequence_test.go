@@ -38,3 +38,26 @@ func TestRaftSequenceSearch(t *testing.T) {
 		t.Error(fmt.Sprintf("got index %d\n", res))
 	}
 }
+
+func TestRaftSequenceSerDeser(t *testing.T) {
+	seq := RaftSequence{Term: 206, Index: 1123}
+	bytes := seq.AsKey()
+	newSeq, err := NewRaftSequenceFromKey(bytes)
+	if err != nil {
+		t.Error(fmt.Sprintf("%#v\n", err))
+	}
+
+	if *newSeq != seq {
+		t.Error(fmt.Sprintf("seq mistmatch %#v:%#v\n", newSeq, seq))
+	}
+}
+
+func TestRaftSequenceOrder(t *testing.T) {
+	s1 := RaftSequence{Term: 206, Index: 1123}
+	s2 := RaftSequence{Term: 26, Index: 1123}
+	b1 := s1.AsKey()
+	b2 := s2.AsKey()
+	if string(b1) <= string(b2) {
+		t.Error("Order is not correct")
+	}
+}

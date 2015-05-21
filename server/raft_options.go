@@ -11,4 +11,6 @@ type RaftOptions struct {
 	Members []balancer.ServerName
 	// The network access point of myself.
 	Address balancer.ServerName
+	// Path to log db.
+	LogDbRoot string
 }
