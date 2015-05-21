@@ -33,6 +33,16 @@ func (s RaftSequence) AsKey() []byte {
 	return b.Bytes()
 }
 
+func (s RaftSequence) Less(s2 RaftSequence) bool {
+	if s.Term < s2.Term {
+		return true
+	} else if s.Term > s2.Term {
+		return false
+	} else {
+		return s.Index < s2.Index
+	}
+}
+
 type RaftSequenceList []RaftSequence
 
 // Part of "sort.Interface".
@@ -48,21 +58,10 @@ func (s RaftSequenceList) Swap(i, j int) {
 // Part of "sort.Interface".
 // Comparing two index.
 func (s RaftSequenceList) Less(i, j int) bool {
-	return s.LessValue(i, &(s[j]))
-}
-
-// Comparing one index with one value.
-func (s RaftSequenceList) LessValue(i int, seq *RaftSequence) bool {
-	if s[i].Term < seq.Term {
-		return true
-	} else if s[i].Term > seq.Term {
-		return false
-	} else {
-		return s[i].Index < seq.Index
-	}
+	return s[i].Less(s[j])
 }
 
 // Binary search on a sequence list, return the index in the slice.
 func (s RaftSequenceList) Search(seq RaftSequence) int {
-	return sort.Search(len(s), func(i int) bool { return !s.LessValue(i, &seq) })
+	return sort.Search(len(s), func(i int) bool { return !s[i].Less(seq) })
 }

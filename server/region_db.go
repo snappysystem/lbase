@@ -11,5 +11,5 @@ func NewRegionDb(opts *RegionDbOptions) *RegionDb {
 	return nil
 }
 
-func (db *RegionDb) Put(record *RaftRecord) {
+func (db *RegionDb) Put(record *RaftRecord, s RaftSequence) {
 }
