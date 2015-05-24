@@ -5,14 +5,29 @@ import (
 	"time"
 )
 
-func Multicast(calls []*rpc.Call, timeOutMs int64) map[*rpc.Call]bool {
-	var ctrlChans []chan bool
-	doneChan := make(chan *rpc.Call, len(calls))
+type Multicast struct {
+	ctrlChans   []chan bool
+	doneChan    chan *rpc.Call
+	timeoutChan chan bool
+}
+
+func NewMulticast(calls []*rpc.Call, timeoutMs int64) *Multicast {
+	ret := &Multicast{
+		ctrlChans:   make([]chan bool, 1),
+		doneChan:    make(chan *rpc.Call, len(calls)),
+		timeoutChan: make(chan bool, 1),
+	}
+
+	// Setup timeout channel.
+	go func() {
+		<-time.After(time.Duration(timeoutMs) * time.Millisecond)
+		ret.timeoutChan <- true
+	}()
 
 	for _, call := range calls {
 		if call != nil {
 			exitChan := make(chan bool, 1)
-			ctrlChans = append(ctrlChans, exitChan)
+			ret.ctrlChans = append(ret.ctrlChans, exitChan)
 
 			go func() {
 				shouldExit := true
@@ -20,7 +35,7 @@ func Multicast(calls []*rpc.Call, timeOutMs int64) map[*rpc.Call]bool {
 					select {
 					case <-exitChan:
 					case <-call.Done:
-						doneChan <- call
+						ret.doneChan <- call
 					default:
 						shouldExit = false
 					}
@@ -32,16 +47,29 @@ func Multicast(calls []*rpc.Call, timeOutMs int64) map[*rpc.Call]bool {
 		}
 	}
 
+	return ret
+}
+
+// Clean up resources: quit all pending go rotines.
+func (m *Multicast) Close() {
+	// Signal to quit all pending RPC go routines.
+	for _, ch := range m.ctrlChans {
+		ch <- true
+	}
+}
+
+// Wait for all rpc finish, or timeout occurs, then return
+// all available replies. The call also close the Multicast
+// operation automatically.
+func (m *Multicast) WaitAll() map[*rpc.Call]bool {
 	// Process replies.
 	replies := make(map[*rpc.Call]bool)
-	for len(replies) < len(ctrlChans) {
-		start := time.Now()
+	for len(replies) < len(m.ctrlChans) {
 		needsBreak := false
-
 		select {
-		case call := <-doneChan:
+		case call := <-m.doneChan:
 			replies[call] = true
-		case <-time.After(time.Duration(timeOutMs) * time.Millisecond):
+		case <-m.timeoutChan:
 			needsBreak = true
 		default:
 		}
@@ -49,18 +77,26 @@ func Multicast(calls []*rpc.Call, timeOutMs int64) map[*rpc.Call]bool {
 		if needsBreak {
 			break
 		}
+	}
 
-		dur := time.Since(start)
-		timeOutMs = timeOutMs - dur.Nanoseconds()*1000000
-		if timeOutMs <= 0 {
-			break
+	m.Close()
+
+	return replies
+}
+
+// Wait for one pending rpc to finish. If there is no pending rpc or
+// timeout has reached, return nil. The caller is responsible to
+// close this Multicast object after it is no longer needed.
+func (m *Multicast) WaitOne() *rpc.Call {
+	for {
+		select {
+		case call := <-m.doneChan:
+			return call
+		case <-m.timeoutChan:
+			return nil
+		default:
 		}
 	}
 
-	// Signal to quit all pending RPC go routines.
-	for _, ch := range ctrlChans {
-		ch <- true
-	}
-
-	return replies
+	return nil
 }

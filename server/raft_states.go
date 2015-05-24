@@ -128,7 +128,7 @@ func (s *RaftStates) CandidateLoop() {
 			calls = append(calls, call)
 		}
 
-		callMap := Multicast(calls, s.opts.RequestVoteTimeoutMs)
+		callMap := NewMulticast(calls, s.opts.RequestVoteTimeoutMs).WaitAll()
 
 		agreed := 0
 		for c, _ := range callMap {
