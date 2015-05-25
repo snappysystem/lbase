@@ -18,4 +18,6 @@ type RaftOptions struct {
 	CandidateWaitMs int64
 	// Timeout value for RequestVote call.
 	RequestVoteTimeoutMs int64
+	// Timeout value for leader.
+	RaftLeaderTimeoutMs int64
 }
