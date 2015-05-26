@@ -24,6 +24,8 @@ type RaftStates struct {
 	clientMap map[balancer.ServerName]*rpc.Client
 	// A channel to receive leader's activity.
 	leaderActivityChan chan bool
+	// Maps voting history for each of term.
+	termMap map[int64]balancer.ServerName
 }
 
 func NewRaftStates(opts *RaftOptions, db *RaftStorage) *RaftStates {
@@ -32,7 +34,8 @@ func NewRaftStates(opts *RaftOptions, db *RaftStorage) *RaftStates {
 		opts:               opts,
 		db:                 db,
 		clientMap:          make(map[balancer.ServerName]*rpc.Client),
-		leaderActivityChan: make(chan bool),
+		leaderActivityChan: make(chan bool, 1024),
+		termMap:            make(map[int64]balancer.ServerName),
 	}
 }
 
@@ -336,5 +339,80 @@ func (s *RaftStates) ScanPendingLogs(start *RaftSequence) map[RaftSequence][]byt
 	return ret
 }
 
-func (s *RaftStates) HandleRequestVote() {
+func (s *RaftStates) HandleRequestVote(req *RequestVote, resp *RequestVoteReply) {
+	if req.Term <= s.GetLastTerm() {
+		resp.Ok = false
+	} else if req.LastSequence.Less(s.db.GetRaftSequence()) {
+		resp.Ok = false
+	} else {
+		sn, hasVote := s.termMap[req.Term]
+		if !hasVote {
+			s.termMap[req.Term] = req.ServerName
+			resp.Ok = true
+
+			if len(s.termMap) > 10 {
+				go s.TrimTermMap()
+			}
+		} else if sn != req.ServerName {
+			resp.Ok = false
+		} else {
+			resp.Ok = true
+		}
+	}
+}
+
+func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntriesReply) {
+	if req.Term < s.GetLastTerm() {
+		resp.NotLeader = true
+		return
+	}
+
+	s.leaderActivityChan <- true
+
+	// If leader has given up, do not check the data with the request.
+	var zeroSequence RaftSequence
+	if req.LeaderGuessedSequence == zeroSequence {
+		return
+	}
+
+	// If leader has not figure out my progress yet, give it a hint.
+	iter := s.db.log.CreateIterator(s.db.rdOpts)
+	defer iter.Destroy()
+
+	var savedSeq RaftSequence
+	var matchedSeq bool
+
+	iter.Seek(req.LeaderGuessedSequence.AsKey())
+	if iter.Valid() {
+		savedSeq = NewRaftSequenceFromKey(iter.Key())
+		if savedSeq == req.LeaderGuessedSequence {
+			matchedSeq = true
+		}
+	}
+
+	// If the sequence has not been matched, try to find the previous
+	// sequence number.
+	if !matchedSeq {
+		moveBackward := false
+		if iter.Valid() {
+			iter.Prev()
+			if iter.Valid() {
+				moveBackward = true
+				resp.RealSequence = NewRaftSequenceFromKey(iter.Key())
+			}
+		}
+
+		// If we cannot move backward, we should let leader to give up
+		// by setting resp.RealSequence to 0, which is the default
+		// behavior.
+	}
+}
+
+func (s *RaftStates) TrimTermMap() {
+	sureTerm := s.db.GetCommitSequence().Term
+	for k, _ := range s.termMap {
+		if k < sureTerm {
+			delete(s.termMap, k)
+		}
+	}
 }
