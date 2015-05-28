@@ -20,4 +20,7 @@ type RequestVote struct {
 type RequestVoteReply struct {
 	// Wether or not the server agrees that the candiate should be leader.
 	Ok bool
+	// If the caller has smaller term number, return current term back
+	// so that the caller can have a chance to catch up in voting.
+	MyTerm int64
 }

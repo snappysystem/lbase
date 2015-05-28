@@ -138,8 +138,12 @@ func (s *RaftStates) CandidateLoop() {
 
 		agreed := 0
 		for c, _ := range callMap {
-			if c.Reply.(*RequestVoteReply).Ok {
+			reply := c.Reply.(*RequestVoteReply)
+			if reply.Ok {
 				agreed++
+			}
+			if reply.MyTerm > term {
+				term = reply.MyTerm
 			}
 		}
 
@@ -340,7 +344,8 @@ func (s *RaftStates) ScanPendingLogs(start *RaftSequence) map[RaftSequence][]byt
 }
 
 func (s *RaftStates) HandleRequestVote(req *RequestVote, resp *RequestVoteReply) {
-	if req.Term <= s.GetLastTerm() {
+	lastTerm := s.GetLastTerm()
+	if req.Term <= lastTerm {
 		resp.Ok = false
 	} else if req.LastSequence.Less(s.db.GetRaftSequence()) {
 		resp.Ok = false
@@ -358,6 +363,10 @@ func (s *RaftStates) HandleRequestVote(req *RequestVote, resp *RequestVoteReply)
 		} else {
 			resp.Ok = true
 		}
+	}
+
+	if !resp.Ok && req.Term < lastTerm {
+		resp.MyTerm = lastTerm
 	}
 }
 
@@ -384,7 +393,8 @@ func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntries
 
 	iter.Seek(req.LeaderGuessedSequence.AsKey())
 	if iter.Valid() {
-		savedSeq = NewRaftSequenceFromKey(iter.Key())
+		tmp, _ := NewRaftSequenceFromKey(iter.Key())
+		savedSeq = *tmp
 		if savedSeq == req.LeaderGuessedSequence {
 			matchedSeq = true
 		}
@@ -393,12 +403,11 @@ func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntries
 	// If the sequence has not been matched, try to find the previous
 	// sequence number.
 	if !matchedSeq {
-		moveBackward := false
 		if iter.Valid() {
 			iter.Prev()
 			if iter.Valid() {
-				moveBackward = true
-				resp.RealSequence = NewRaftSequenceFromKey(iter.Key())
+				tmp, _ := NewRaftSequenceFromKey(iter.Key())
+				resp.RealSequence = *tmp
 			}
 		}
 
