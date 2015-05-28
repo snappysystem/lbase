@@ -18,10 +18,12 @@ type RaftStates struct {
 	state int
 	// Cached value of biggest term.
 	lastTerm int64
+	// If this is the leader, hold current term value. Otherwise, it is 0.
+	leaderTerm int64
 	opts     *RaftOptions
 	// Underlying storage.
 	db        *RaftStorage
-	clientMap map[balancer.ServerName]*rpc.Client
+	clientMap map[balancer.ServerName][]*rpc.Client
 	// A channel to receive leader's activity.
 	leaderActivityChan chan bool
 	// Maps voting history for each of term.
@@ -33,7 +35,7 @@ func NewRaftStates(opts *RaftOptions, db *RaftStorage) *RaftStates {
 		state:              RAFT_FOLLOWER,
 		opts:               opts,
 		db:                 db,
-		clientMap:          make(map[balancer.ServerName]*rpc.Client),
+		clientMap:          make(map[balancer.ServerName][]*rpc.Client),
 		leaderActivityChan: make(chan bool, 1024),
 		termMap:            make(map[int64]balancer.ServerName),
 	}
@@ -50,9 +52,13 @@ func (s *RaftStates) GetLastTerm() int64 {
 }
 
 func (s *RaftStates) GetClient(name balancer.ServerName) *rpc.Client {
-	cli, found := s.clientMap[name]
-	if found {
-		return cli
+	cls, found := s.clientMap[name]
+	if found && len(cls) > 0 {
+		lastIdx := len(cls) - 1
+		ret := cls[lastIdx]
+		cls = cls[:lastIdx]
+		s.clientMap[name] = cls
+		return ret
 	}
 
 	// Only create clients that are in the quorum group.
@@ -76,6 +82,15 @@ func (s *RaftStates) GetClient(name balancer.ServerName) *rpc.Client {
 	return cli
 }
 
+func (s *RaftStates) ReturnClient(name balancer.ServerName, cli *rpc.Client) {
+	cls, _ := s.clientMap[name]
+	if len(cls) > 4 {
+		return
+	}
+	cls = append(cls, cli)
+	s.clientMap[name] = cls
+}
+
 func (s *RaftStates) TransitToCandidate() {
 	if s.state != RAFT_FOLLOWER {
 		panic(fmt.Sprintf("current state is not follower: %#v", s.state))
@@ -95,6 +110,7 @@ func (s *RaftStates) CandidateLoop() {
 		}
 
 		cliMap := make(map[balancer.ServerName]*rpc.Client)
+
 		for _, sn := range s.opts.Members {
 			cli := s.GetClient(sn)
 			if cli != nil {
@@ -152,6 +168,11 @@ func (s *RaftStates) CandidateLoop() {
 		}
 
 		term++
+
+		// Return unused clients.
+		for sn,cli := range cliMap {
+			s.ReturnClient(sn, cli)
+		}
 	}
 }
 
@@ -160,6 +181,7 @@ func (s *RaftStates) TransitToLeader(term int64) {
 		return
 	}
 	s.state = RAFT_LEADER
+	s.leaderTerm = term
 	go s.LeaderLoop(term)
 }
 
@@ -290,6 +312,10 @@ func (s *RaftStates) LeaderLoop(term int64) {
 
 		mcast.Close()
 
+		for sn, cli := range cliMap {
+			s.ReturnClient(sn, cli)
+		}
+
 		if noLongerLeader {
 			s.TransitToFollower()
 			return
@@ -301,6 +327,9 @@ func (s *RaftStates) LeaderLoop(term int64) {
 
 func (s *RaftStates) TransitToFollower() {
 	s.state = RAFT_FOLLOWER
+	if s.leaderTerm != 0 {
+		s.leaderTerm = 0
+	}
 	go s.FollowerLoop()
 }
 
@@ -374,6 +403,19 @@ func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntries
 	if req.Term < s.GetLastTerm() {
 		resp.NotLeader = true
 		return
+	}
+
+	if s.state == RAFT_CANDIDATE {
+		s.TransitToFollower()
+	} else if s.state == RAFT_LEADER {
+		if req.Term < s.leaderTerm {
+			resp.NotLeader = true
+			return
+		} else if req.Term == s.leaderTerm {
+			panic("Having two leaders for the same term!")
+		} else {
+			s.TransitToFollower()
+		}
 	}
 
 	s.leaderActivityChan <- true
