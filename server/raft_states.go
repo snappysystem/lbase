@@ -20,7 +20,7 @@ type RaftStates struct {
 	lastTerm int64
 	// If this is the leader, hold current term value. Otherwise, it is 0.
 	leaderTerm int64
-	opts     *RaftOptions
+	opts       *RaftOptions
 	// Underlying storage.
 	db        *RaftStorage
 	clientMap map[balancer.ServerName][]*rpc.Client
@@ -170,7 +170,7 @@ func (s *RaftStates) CandidateLoop() {
 		term++
 
 		// Return unused clients.
-		for sn,cli := range cliMap {
+		for sn, cli := range cliMap {
 			s.ReturnClient(sn, cli)
 		}
 	}

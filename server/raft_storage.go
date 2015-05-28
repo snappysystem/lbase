@@ -18,7 +18,7 @@ type RaftStorage struct {
 	// Raft logs are kept in a separate db.
 	log db.Db
 	// Stores the committed data.
-	rdb *RegionDb
+	store *RegionStore
 	// Various options for raft storage.
 	opts *RaftOptions
 	// Leveldb write options.
@@ -31,7 +31,7 @@ type RaftStorage struct {
 	lastCommitSequence *RaftSequence
 }
 
-func NewRaftStorage(opts *RaftOptions, rdb *RegionDb) (ret *RaftStorage, err error) {
+func NewRaftStorage(opts *RaftOptions, store *RegionStore) (ret *RaftStorage, err error) {
 	// Create a log db if we have not done so yet.
 	logopts := db.NewDbOptions()
 	logopts.SetCreateIfMissing(1)
@@ -44,7 +44,7 @@ func NewRaftStorage(opts *RaftOptions, rdb *RegionDb) (ret *RaftStorage, err err
 
 	ret = &RaftStorage{
 		log:    log,
-		rdb:    rdb,
+		store:  store,
 		opts:   opts,
 		wrOpts: db.NewWriteOptions(),
 		rdOpts: db.NewReadOptions(),
@@ -141,7 +141,7 @@ func (s *RaftStorage) Commit(seq RaftSequence) RaftCommitStatus {
 		return COMMIT_PARSE_ERROR
 	}
 
-	s.rdb.Put(record, seq)
+	s.store.Put(record.Key, record.Value, seq)
 
 	// Adjust cached sequence number.
 	if s.lastCommitSequence != nil {
