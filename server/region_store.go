@@ -1,8 +1,6 @@
 package server
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"lbase/balancer"
 	"lbase/db"
@@ -38,10 +36,8 @@ func NewRegionStore(ropts *RegionStoreOptions) *RegionStore {
 }
 
 func (s *RegionStore) Put(key, value []byte, seq RaftSequence) {
-	keyBuf := bytes.NewBuffer(key)
-	binary.Write(keyBuf, binary.BigEndian, seq.Index)
-	realKey := keyBuf.Bytes()
-	err := s.db.Put(s.wrOpts, realKey, value)
+	sKey := NewStoreKey(key, seq.Index)
+	err := s.db.Put(s.wrOpts, sKey, value)
 	if err != nil {
 		panic(fmt.Sprintf("Put: %#v", err))
 	}
