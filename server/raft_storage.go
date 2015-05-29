@@ -141,7 +141,7 @@ func (s *RaftStorage) Commit(seq RaftSequence) RaftCommitStatus {
 		return COMMIT_PARSE_ERROR
 	}
 
-	s.store.Put(record.Key, record.Value, seq)
+	s.store.Put(record.Key, record.Value, seq.Index)
 
 	// Adjust cached sequence number.
 	if s.lastCommitSequence != nil {

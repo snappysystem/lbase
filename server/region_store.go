@@ -35,10 +35,14 @@ func NewRegionStore(ropts *RegionStoreOptions) *RegionStore {
 	}
 }
 
-func (s *RegionStore) Put(key, value []byte, seq RaftSequence) {
-	sKey := NewStoreKey(key, seq.Index)
+func (s *RegionStore) Put(key, value []byte, ver int64) {
+	sKey := NewStoreKey(key, ver)
 	err := s.db.Put(s.wrOpts, sKey, value)
 	if err != nil {
 		panic(fmt.Sprintf("Put: %#v", err))
 	}
+}
+
+func (s *RegionStore) GetDb() db.Db {
+	return s.db
 }
