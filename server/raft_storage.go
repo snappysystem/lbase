@@ -65,7 +65,7 @@ func (s *RaftStorage) GetRaftSequence() RaftSequence {
 	if iter.Valid() {
 		key := iter.Key()
 		ret, err := NewRaftSequenceFromKey(key)
-		if err != nil {
+		if err == nil {
 			s.lastRaftSequence = ret
 			return *ret
 		} else {
@@ -88,13 +88,22 @@ func (s *RaftStorage) GetCommitSequence() RaftSequence {
 	if iter.Valid() {
 		key := iter.Key()
 		ret, err := NewRaftSequenceFromKey(key)
-		if err != nil {
+		if err == nil {
 			s.lastCommitSequence = ret
 			return *ret
 		} else {
 			panic(fmt.Sprintf("parse key: %#v", err))
 		}
 	} else {
+		// If there is no record in the log yet, fake one with
+		// sequence number 0 so that it conforms with our assumption
+		// that the log always keep the last record that has been
+		// committed.
+		errPut := s.log.Put(s.wrOpts, RaftSequence{}.AsKey(), []byte("a"))
+		if errPut != nil {
+			panic(fmt.Sprintf("Fails to write initial data: %#v", errPut))
+		}
+
 		return RaftSequence{}
 	}
 }
@@ -109,12 +118,12 @@ func (s *RaftStorage) SaveRaftRecord(seq RaftSequence, record []byte) bool {
 
 	// Adjust cached last sequence number.
 	raftSeq := s.GetRaftSequence()
-	if raftSeq.Less(seq) {
+	if s.lastRaftSequence != nil && raftSeq.Less(seq) {
 		*(s.lastRaftSequence) = seq
 	}
 
 	errPut := s.log.Put(s.wrOpts, seq.AsKey(), record)
-	if errPut != nil {
+	if errPut == nil {
 		return true
 	} else {
 		panic(fmt.Sprintf("Fails to put: %#v", errPut))

@@ -51,3 +51,45 @@ func TestInitRaftStorage(t *testing.T) {
 		t.Error("expect sequence 0 does not appear:", seq)
 	}
 }
+
+func TestSaveRaftRecordNonOverride(t *testing.T) {
+	root := "/tmp/TestSaveRaftRecordNonOverride"
+	store := initStorageForTest(root)
+
+	s1 := RaftSequence{Index: 1, Term: 1}
+	store.SaveRaftRecord(s1, []byte("hello"))
+
+	s2 := RaftSequence{Index: 2, Term: 1}
+	store.SaveRaftRecord(s2, []byte("world"))
+
+	seq := store.GetRaftSequence()
+	if seq.Index != 2 || seq.Term != 1 {
+		t.Error("expect sequence 0 does not appear:", seq)
+	}
+
+	seq = store.GetCommitSequence()
+	if seq.Index != 0 || seq.Term != 0 {
+		t.Error("expect sequence 0 does not appear:", seq)
+	}
+}
+
+func TestSaveRaftRecordOverride(t *testing.T) {
+	root := "/tmp/TestSaveRaftRecordOverride"
+	store := initStorageForTest(root)
+
+	s1 := RaftSequence{Index: 1, Term: 1}
+	store.SaveRaftRecord(s1, []byte("hello"))
+
+	s2 := RaftSequence{Index: 1, Term: 1}
+	store.SaveRaftRecord(s2, []byte("world"))
+
+	seq := store.GetRaftSequence()
+	if seq.Index != 1 || seq.Term != 1 {
+		t.Error("expect sequence 0 does not appear:", seq)
+	}
+
+	seq = store.GetCommitSequence()
+	if seq.Index != 0 || seq.Term != 0 {
+		t.Error("expect sequence 0 does not appear:", seq)
+	}
+}
