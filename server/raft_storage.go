@@ -194,7 +194,8 @@ func (s *RaftStorage) Commit(seq RaftSequence) RaftCommitStatus {
 
 // Help membership move or region split/merge.
 func (s *RaftStorage) Close() {
-	panic("Not implemented yet")
+	s.log.Close()
+	s.store.Close()
 }
 
 // Helper method for region split.

@@ -20,12 +20,13 @@ func NewRaftRecord(msg []byte) (ret *RaftRecord, err error) {
 }
 
 // Serialize a raft record into a slice.
-func (r *RaftRecord) ToSlice() (res []byte, err error) {
+func (r *RaftRecord) ToSlice() []byte {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	err = enc.Encode(r)
+	err := enc.Encode(r)
+	var res []byte
 	if err == nil {
 		res = b.Bytes()
 	}
-	return
+	return res
 }

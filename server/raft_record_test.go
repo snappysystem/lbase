@@ -11,10 +11,7 @@ func TestRaftRecord(t *testing.T) {
 		Value: []byte("world"),
 	}
 
-	msg, serializeErr := record.ToSlice()
-	if serializeErr != nil {
-		t.Error(fmt.Sprintf("%#v\n", serializeErr))
-	}
+	msg := record.ToSlice()
 
 	newRecord, deserializeErr := NewRaftRecord(msg)
 	if deserializeErr != nil {

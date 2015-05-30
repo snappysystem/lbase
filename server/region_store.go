@@ -25,7 +25,7 @@ func NewRegionStore(ropts *RegionStoreOptions) *RegionStore {
 
 	leveldb, openError := db.OpenDb(opts, ropts.Name)
 	if openError != nil {
-		panic("Fails to open db")
+		panic(fmt.Sprintf("Fails to open db:%#v", openError))
 	}
 
 	return &RegionStore{
@@ -45,4 +45,9 @@ func (s *RegionStore) Put(key, value []byte, ver int64) {
 
 func (s *RegionStore) GetDb() db.Db {
 	return s.db
+}
+
+// Flush all data and invalidate the objects.
+func (s *RegionStore) Close() {
+	s.db.Close()
 }
