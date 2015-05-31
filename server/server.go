@@ -6,10 +6,15 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"sync/atomic"
 )
 
 const (
 	listenPortBase = 8080
+)
+
+var (
+	rpcPathSequenceNumber int64
 )
 
 type ServerRPC struct {
@@ -52,8 +57,9 @@ type Server struct {
 }
 
 func GetServerPath(port int) (rpcPath, debugPath string) {
-	rpcPath = fmt.Sprintf("/rpc_%d", port)
-	debugPath = fmt.Sprintf("/debug_%d", port)
+	newSeq := atomic.AddInt64(&rpcPathSequenceNumber, 1)
+	rpcPath = fmt.Sprintf("/rpc_%d_%d", port, newSeq)
+	debugPath = fmt.Sprintf("/debug_%d_%d", port, newSeq)
 	return
 }
 
@@ -100,4 +106,28 @@ func NewServerAndPort() (s *Server, port int) {
 
 func (s *Server) Close() {
 	s.listener.Close()
+}
+
+func (s *Server) GetRpcPath() string {
+	return s.rpcPath
+}
+
+func (s *Server) GetDebugPath() string {
+	return s.debugPath
+}
+
+func (s *Server) RegisterRegion(r balancer.Region, states *RaftStates) {
+	s.regionRaftMap[r] = states
+}
+
+func (s *Server) UnregisterRegion(r balancer.Region) {
+	states, found := s.regionRaftMap[r]
+	if found {
+		states.Close()
+		delete(s.regionRaftMap, r)
+	}
+}
+
+func (s *Server) GetPort() int {
+	return s.port
 }

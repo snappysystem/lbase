@@ -1,11 +1,12 @@
 package server
 
 import (
+	"lbase/balancer"
 	"os"
 	"testing"
 )
 
-func initStorageForTest(root string, hard bool) *RaftStorage {
+func initRaftStorageForTest(root string, reg balancer.Region, hard bool) *RaftStorage {
 	if hard {
 		os.RemoveAll(root)
 	}
@@ -26,7 +27,7 @@ func initStorageForTest(root string, hard bool) *RaftStorage {
 	}
 
 	raftOpts := RaftOptionsForTest(logRoot)
-	storeOpts := &RegionStoreOptions{Name: storeRoot}
+	storeOpts := &RegionStoreOptions{Name: storeRoot, Region: reg}
 
 	regionStore := NewRegionStore(storeOpts)
 	if regionStore == nil {
@@ -43,7 +44,7 @@ func initStorageForTest(root string, hard bool) *RaftStorage {
 
 func TestInitRaftStorage(t *testing.T) {
 	root := "/tmp/TestRaftStorage"
-	store := initStorageForTest(root, true)
+	store := initRaftStorageForTest(root, balancer.Region{}, true)
 
 	seq := store.GetRaftSequence()
 	if seq.Index != 0 || seq.Term != 0 {
@@ -58,7 +59,7 @@ func TestInitRaftStorage(t *testing.T) {
 
 func TestSaveRaftRecordNonOverride(t *testing.T) {
 	root := "/tmp/TestSaveRaftRecordNonOverride"
-	store := initStorageForTest(root, true)
+	store := initRaftStorageForTest(root, balancer.Region{}, true)
 
 	s1 := RaftSequence{Index: 1, Term: 1}
 	store.SaveRaftRecord(s1, []byte("hello"))
@@ -79,7 +80,7 @@ func TestSaveRaftRecordNonOverride(t *testing.T) {
 
 func TestSaveRaftRecordOverride(t *testing.T) {
 	root := "/tmp/TestSaveRaftRecordOverride"
-	store := initStorageForTest(root, true)
+	store := initRaftStorageForTest(root, balancer.Region{}, true)
 
 	s1 := RaftSequence{Index: 1, Term: 1}
 	store.SaveRaftRecord(s1, []byte("hello"))
@@ -100,7 +101,7 @@ func TestSaveRaftRecordOverride(t *testing.T) {
 
 func TestCommitRaftLog(t *testing.T) {
 	root := "/tmp/TestCommitRaftLog"
-	store := initStorageForTest(root, true)
+	store := initRaftStorageForTest(root, balancer.Region{}, true)
 
 	r1 := RaftRecord{Key: []byte("one"), Value: []byte("hello")}
 	s1 := RaftSequence{Index: 1, Term: 1}
@@ -127,7 +128,7 @@ func TestRaftStorageSimpleReload(t *testing.T) {
 	root := "/tmp/TestRaftStorageSimpleReload"
 
 	{
-		store := initStorageForTest(root, true)
+		store := initRaftStorageForTest(root, balancer.Region{}, true)
 
 		r1 := RaftRecord{Key: []byte("one"), Value: []byte("hello")}
 		s1 := RaftSequence{Index: 1, Term: 1}
@@ -142,7 +143,7 @@ func TestRaftStorageSimpleReload(t *testing.T) {
 	}
 
 	{
-		store := initStorageForTest(root, false)
+		store := initRaftStorageForTest(root, balancer.Region{}, false)
 
 		seq := store.GetRaftSequence()
 		if seq.Index != 2 || seq.Term != 1 {

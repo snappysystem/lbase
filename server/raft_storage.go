@@ -53,6 +53,10 @@ func NewRaftStorage(opts *RaftOptions, store *RegionStore) (ret *RaftStorage, er
 	return
 }
 
+func (s *RaftStorage) GetRaftOptions() *RaftOptions {
+	return s.opts
+}
+
 func (s *RaftStorage) GetRaftSequence() RaftSequence {
 	if s.lastRaftSequence != nil {
 		return *(s.lastRaftSequence)

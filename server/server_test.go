@@ -14,7 +14,7 @@ func TestServerAlive(t *testing.T) {
 
 	defer serv.Close()
 
-	rpcPath, _ := GetServerPath(port)
+	rpcPath := serv.GetRpcPath()
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	cli, err := rpc.DialHTTPPath("tcp", addr, rpcPath)

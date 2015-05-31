@@ -467,3 +467,7 @@ func (s *RaftStates) TrimTermMap() {
 		}
 	}
 }
+
+func (s *RaftStates) Close() {
+	s.db.Close()
+}
