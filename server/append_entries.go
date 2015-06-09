@@ -6,6 +6,7 @@ import (
 
 // Raft protocol command.
 type AppendEntries struct {
+	ServerName balancer.ServerName
 	// Current term.
 	Term int64
 	// Id of this region.

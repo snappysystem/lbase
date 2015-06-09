@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"sync/atomic"
 )
 
 const (
@@ -16,6 +15,17 @@ const (
 var (
 	rpcPathSequenceNumber int64
 )
+
+// Request to get the state of a raft member.
+type RaftStateRequest struct {
+	Region balancer.Region
+}
+
+// Response of a raft state query.
+type RaftStateReply struct {
+	Found bool
+	State int
+}
 
 type ServerRPC struct {
 	regionRaftMap map[balancer.Region]*RaftStates
@@ -47,6 +57,14 @@ func (s *ServerRPC) AppendEntries(req AppendEntries, resp *AppendEntriesReply) e
 	return nil
 }
 
+func (s *ServerRPC) GetRaftState(req RaftStateRequest, resp *RaftStateReply) error {
+	states, found := s.regionRaftMap[req.Region]
+	if found {
+		states.HandleGetRaftState(req, resp)
+	}
+	return nil
+}
+
 type Server struct {
 	ServerRPC
 	impl      *rpc.Server
@@ -56,21 +74,25 @@ type Server struct {
 	listener  net.Listener
 }
 
-func GetServerPath(port int) (rpcPath, debugPath string) {
-	newSeq := atomic.AddInt64(&rpcPathSequenceNumber, 1)
-	rpcPath = fmt.Sprintf("/rpc_%d_%d", port, newSeq)
-	debugPath = fmt.Sprintf("/debug_%d_%d", port, newSeq)
+// In order to support multiple http registrations for different test cases,
+// we do not use default RPC path "/rpc". Instead, each test case can have
+// a unique prefix string which combined with http server's port number,
+// provide a unique http registration for a single test case. This is not
+// nencessary in production, though.
+func GetServerPath(prefix string, port int) (rpcPath, debugPath string) {
+	rpcPath = fmt.Sprintf("/rpc_%s_%d", prefix, port)
+	debugPath = fmt.Sprintf("/debug_%s_%d", prefix, port)
 	return
 }
 
-func NewServer(port int) *Server {
-	l, e := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func NewServer(prefix string, port int) *Server {
+	l, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if e != nil {
 		fmt.Println("Fails to listen:", e)
 		return nil
 	}
 
-	rpcPath, debugPath := GetServerPath(port)
+	rpcPath, debugPath := GetServerPath(prefix, port)
 
 	s := &Server{
 		ServerRPC: ServerRPC{},
@@ -93,9 +115,9 @@ func NewServer(port int) *Server {
 
 // Find an available port, return a new server and the associated
 // port number.
-func NewServerAndPort() (s *Server, port int) {
+func NewServerAndPort(prefix string) (s *Server, port int) {
 	for i := listenPortBase; i < listenPortBase+1000; i++ {
-		s = NewServer(i)
+		s = NewServer(prefix, i)
 		if s != nil {
 			port = i
 			return

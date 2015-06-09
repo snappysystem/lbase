@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"lbase/balancer"
+	"log"
 	"net/rpc"
 	"time"
 )
@@ -73,9 +74,12 @@ func (s *RaftStates) GetClient(name balancer.ServerName) *rpc.Client {
 		return nil
 	}
 
-	cli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", name.Host, name.Port))
+	addr := fmt.Sprintf("%s:%d", name.Host, name.Port)
+	path, _ := GetServerPath(s.opts.RPCPrefix, name.Port)
+
+	cli, err := rpc.DialHTTPPath("tcp", addr, path)
 	if err != nil {
-		fmt.Printf("Fails to create connection to %#v: %#v\n", name, err)
+		log.Printf("Fails to create connection to %s: %#v\n", addr, err)
 		return nil
 	}
 
@@ -93,7 +97,7 @@ func (s *RaftStates) ReturnClient(name balancer.ServerName, cli *rpc.Client) {
 
 func (s *RaftStates) TransitToCandidate() {
 	if s.state != RAFT_FOLLOWER {
-		panic(fmt.Sprintf("current state is not follower: %#v", s.state))
+		log.Panic("current state is not follower: ", s.state)
 	}
 
 	s.state = RAFT_CANDIDATE
@@ -108,6 +112,9 @@ func (s *RaftStates) CandidateLoop() {
 		if s.state != RAFT_CANDIDATE {
 			return
 		}
+
+		waitTimeMs := time.Duration(s.opts.CandidateWaitMs)
+		waitChan := time.After(waitTimeMs * time.Millisecond)
 
 		cliMap := make(map[balancer.ServerName]*rpc.Client)
 
@@ -138,41 +145,46 @@ func (s *RaftStates) CandidateLoop() {
 			LastSequence: s.db.GetRaftSequence(),
 		}
 
-		var calls []*rpc.Call
-		for _, cli := range cliMap {
-			resp := &RequestVoteReply{}
-			call := cli.Go(
-				"ServerService.RequestVote",
-				&req,
-				resp,
-				nil)
+		// Start multicasting with timeout.
+		callName := "ServerRPC.RequestVote"
 
-			calls = append(calls, call)
+		period := time.Duration(s.opts.RequestVoteTimeoutMs)
+		timeCh := time.After(period * time.Millisecond)
+
+		calls := make(map[balancer.ServerName]*rpc.Call)
+		for sn, cli := range cliMap {
+			resp := &RequestVoteReply{}
+			calls[sn] = cli.Go(callName, &req, resp, nil)
 		}
 
-		callMap := NewMulticast(calls, s.opts.RequestVoteTimeoutMs).WaitAll()
-
 		agreed := 0
-		for c, _ := range callMap {
-			reply := c.Reply.(*RequestVoteReply)
-			if reply.Ok {
-				agreed++
-			}
-			if reply.MyTerm > term {
-				term = reply.MyTerm
+		for sn, call := range calls {
+			select {
+			case <-call.Done:
+				reply := call.Reply.(*RequestVoteReply)
+				if reply.Ok {
+					agreed++
+				}
+				if reply.MyTerm > term {
+					term = reply.MyTerm
+				}
+				cli, found := cliMap[sn]
+				if !found {
+					log.Panic("Server ", sn, " not found")
+				}
+				s.ReturnClient(sn, cli)
+			case <-timeCh:
+				timeCh = time.After(time.Duration(0))
 			}
 		}
 
 		if agreed > numMembers/2 {
 			s.TransitToLeader(term)
+			return
 		}
 
+		<-waitChan
 		term++
-
-		// Return unused clients.
-		for sn, cli := range cliMap {
-			s.ReturnClient(sn, cli)
-		}
 	}
 }
 
@@ -224,14 +236,15 @@ func (s *RaftStates) LeaderLoop(term int64) {
 			}
 		}
 
-		callMap := make(map[*rpc.Call]balancer.ServerName)
+		callMap := make(map[balancer.ServerName]*rpc.Call)
 
 		// Send RPC to each of member servers.
 		for sn, cli := range cliMap {
 			req := AppendEntries{
-				Term:   term,
-				Region: s.opts.Region,
-				Data:   make(map[RaftSequence][]byte),
+				ServerName: s.opts.Address,
+				Term:       term,
+				Region:     s.opts.Region,
+				Data:       make(map[RaftSequence][]byte),
 			}
 
 			progSeq, hasProgSeq := progMap[sn]
@@ -255,65 +268,50 @@ func (s *RaftStates) LeaderLoop(term int64) {
 			}
 
 			var reply AppendEntriesReply
-			call := cli.Go(
-				"Server.AppendEntries",
-				&req,
-				&reply,
-				nil)
+			callName := "ServerRPC.AppendEntries"
 
-			callMap[call] = sn
+			callMap[sn] = cli.Go(callName, &req, &reply, nil)
 		}
 
-		var calls []*rpc.Call
-		for c, _ := range callMap {
-			calls = append(calls, c)
-		}
+		var zeroSequence RaftSequence
 
-		mcast := NewMulticast(calls, s.opts.RaftLeaderTimeoutMs/2)
+		timeOut := time.Duration(s.opts.RaftLeaderTimeoutMs / 2)
+		timeChan := time.After(timeOut * time.Millisecond)
+
+		// Processing RPC replies.
 		noLongerLeader := false
+		for sn, call := range callMap {
+			select {
+			case <-call.Done:
+				resp := call.Reply.(*AppendEntriesReply)
+				if resp.NotLeader {
+					noLongerLeader = true
+					break
+				}
 
-		// Check for AppendEntries replies.
-		for {
-			call := mcast.WaitOne()
-			if call == nil {
-				break
+				prog, hasProg := progMap[sn]
+				if !hasProg {
+					panic("Do not have progMap entry!")
+				}
+
+				if resp.RealSequence == zeroSequence {
+					// If the client want to be left alone, do so.
+					delete(unknownProgressMap, sn)
+					progMap[sn] = resp.RealSequence
+				} else if resp.RealSequence == prog {
+					// Leader guessed correctly, enable record replication.
+					delete(unknownProgressMap, sn)
+				} else if prog.Less(resp.RealSequence) {
+					// Replication made progress.
+					progMap[sn] = resp.RealSequence
+				} else {
+					panic("real sequence is less than previous progress!")
+				}
+
+				s.ReturnClient(sn, cliMap[sn])
+			case <-timeChan:
+				timeChan = time.After(time.Duration(0))
 			}
-
-			resp := call.Reply.(*AppendEntriesReply)
-			if resp.NotLeader {
-				noLongerLeader = true
-				break
-			}
-
-			sn, hasSn := callMap[call]
-			if !hasSn {
-				panic("Do not have server name!")
-			}
-
-			prog, hasProg := progMap[sn]
-			if !hasProg {
-				panic("Do not have progMap entry!")
-			}
-
-			if resp.RealSequence.Term == 0 && resp.RealSequence.Index == 0 {
-				// If the client want to be left alone, do so.
-				delete(unknownProgressMap, sn)
-				progMap[sn] = resp.RealSequence
-			} else if resp.RealSequence == prog {
-				// Leader guessed correctly, enable record replication.
-				delete(unknownProgressMap, sn)
-			} else if prog.Less(resp.RealSequence) {
-				// Replication made progress.
-				progMap[sn] = resp.RealSequence
-			} else {
-				panic("real sequence is less than previous progress!")
-			}
-		}
-
-		mcast.Close()
-
-		for sn, cli := range cliMap {
-			s.ReturnClient(sn, cli)
 		}
 
 		if noLongerLeader {
@@ -341,7 +339,6 @@ func (s *RaftStates) FollowerLoop() {
 		case <-time.After(time.Duration(ms) * time.Millisecond):
 			s.TransitToCandidate()
 			return
-		default:
 		}
 	}
 }
@@ -412,7 +409,9 @@ func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntries
 			resp.NotLeader = true
 			return
 		} else if req.Term == s.leaderTerm {
-			panic("Having two leaders for the same term!")
+			if req.ServerName != s.opts.Address {
+				log.Panic("Having two leaders for the same term!")
+			}
 		} else {
 			s.TransitToFollower()
 		}
@@ -457,6 +456,11 @@ func (s *RaftStates) HandleAppendEntries(req *AppendEntries, resp *AppendEntries
 		// by setting resp.RealSequence to 0, which is the default
 		// behavior.
 	}
+}
+
+func (s *RaftStates) HandleGetRaftState(req RaftStateRequest, resp *RaftStateReply) {
+	resp.Found = true
+	resp.State = s.state
 }
 
 func (s *RaftStates) TrimTermMap() {

@@ -30,18 +30,13 @@ func NewMulticast(calls []*rpc.Call, timeoutMs int64) *Multicast {
 			ret.ctrlChans = append(ret.ctrlChans, exitChan)
 
 			go func() {
-				shouldExit := true
 				for {
 					select {
 					case <-exitChan:
 					case <-call.Done:
 						ret.doneChan <- call
-					default:
-						shouldExit = false
 					}
-					if shouldExit {
-						break
-					}
+					break
 				}
 			}()
 		}

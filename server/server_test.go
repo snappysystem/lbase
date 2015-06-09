@@ -7,7 +7,8 @@ import (
 )
 
 func TestServerAlive(t *testing.T) {
-	serv, port := NewServerAndPort()
+	rpcPathPrefix := "TestServerAlive"
+	serv, port := NewServerAndPort(rpcPathPrefix)
 	if serv == nil {
 		t.Error("Fails to create a server!")
 	}
@@ -30,6 +31,33 @@ func TestServerAlive(t *testing.T) {
 		t.Error(fmt.Sprintf("Fails to call: %#v", rpcerr))
 	}
 
+	if resp != req {
+		t.Error("Result mismatch!")
+	}
+}
+
+func TestAsyncCall(t *testing.T) {
+	rpcPathPrefix := "TestAsyncCall"
+	serv, port := NewServerAndPort(rpcPathPrefix)
+	if serv == nil {
+		t.Error("Fails to create a server!")
+	}
+
+	defer serv.Close()
+
+	rpcPath := serv.GetRpcPath()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	cli, err := rpc.DialHTTPPath("tcp", addr, rpcPath)
+	if err != nil {
+		t.Error(fmt.Sprintf("Fails to connect: %#v", err))
+	}
+
+	req := 7
+	var resp int
+
+	call := cli.Go("ServerRPC.Echo", req, &resp, nil)
+	<-call.Done
 	if resp != req {
 		t.Error("Result mismatch!")
 	}

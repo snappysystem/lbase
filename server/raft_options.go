@@ -20,6 +20,8 @@ type RaftOptions struct {
 	RequestVoteTimeoutMs int64
 	// Timeout value for leader.
 	RaftLeaderTimeoutMs int64
+	// HTTP RPC path prefix.
+	RPCPrefix string
 }
 
 func DefaultRaftOptions(root string) *RaftOptions {
@@ -34,8 +36,8 @@ func DefaultRaftOptions(root string) *RaftOptions {
 func RaftOptionsForTest(root string) *RaftOptions {
 	return &RaftOptions{
 		LogDbRoot:            root,
-		CandidateWaitMs:      400,
-		RequestVoteTimeoutMs: 200,
-		RaftLeaderTimeoutMs:  1000,
+		CandidateWaitMs:      800,
+		RequestVoteTimeoutMs: 400,
+		RaftLeaderTimeoutMs:  200,
 	}
 }
