@@ -475,3 +475,7 @@ func (s *RaftStates) TrimTermMap() {
 func (s *RaftStates) Close() {
 	s.db.Close()
 }
+
+func (s *RaftStates) GetStorage() *RaftStorage {
+	return s.db
+}
