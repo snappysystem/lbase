@@ -4,6 +4,11 @@ import (
 	"lbase/balancer"
 )
 
+// This interface collects pending records from members of raft quorum.
+type RecordCollector interface {
+	Collect(locs []balancer.ServerName) map[balancer.ServerName][][]byte
+}
+
 type RaftOptions struct {
 	// An ID uniquely identify this raft quorum.
 	Region balancer.Region
@@ -22,6 +27,8 @@ type RaftOptions struct {
 	RaftLeaderTimeoutMs int64
 	// HTTP RPC path prefix.
 	RPCPrefix string
+	// How to collect incoming raft records.
+	Collector RecordCollector
 }
 
 func DefaultRaftOptions(root string) *RaftOptions {

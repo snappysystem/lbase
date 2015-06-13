@@ -258,7 +258,7 @@ func (s *RaftStates) LeaderLoop(term int64) {
 			} else if progSeq.Index > 0 {
 				// Get data from raft logs.
 				if progSeq.Less(lastSeq) {
-					req.Data = s.ScanPendingLogs(&progSeq)
+					req.Data = s.ScanNoncommitLogs(&progSeq)
 				}
 
 				// Appending any new records.
@@ -343,7 +343,7 @@ func (s *RaftStates) FollowerLoop() {
 	}
 }
 
-func (s *RaftStates) ScanPendingLogs(start *RaftSequence) map[RaftSequence][]byte {
+func (s *RaftStates) ScanNoncommitLogs(start *RaftSequence) map[RaftSequence][]byte {
 	iter := s.db.log.CreateIterator(s.db.rdOpts)
 	defer iter.Destroy()
 
@@ -478,4 +478,8 @@ func (s *RaftStates) Close() {
 
 func (s *RaftStates) GetStorage() *RaftStorage {
 	return s.db
+}
+
+func (s *RaftStates) preparePendingRecords() map[RaftSequence][]byte {
+	return nil
 }
