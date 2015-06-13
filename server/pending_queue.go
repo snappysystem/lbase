@@ -57,6 +57,10 @@ func NewPendingQueue(opts *PendingQueueOptions) *PendingQueue {
 	}
 }
 
+func (q *PendingQueue) Close() {
+	q.db.Close()
+}
+
 func (q *PendingQueue) GetLastSequence() int64 {
 	if q.lastSeq != 0 {
 		return q.lastSeq
@@ -88,10 +92,6 @@ func (q *PendingQueue) GetFirstSequence() int64 {
 		q.firstSeq = ParseQueueKey(q.opts.QueueKeyPrefix, qk)
 	}
 
-	if q.firstSeq == q.GetLastSequence() {
-		q.firstSeq++
-	}
-
 	return q.firstSeq
 }
 
@@ -108,12 +108,17 @@ func (q *PendingQueue) Put(data []byte) {
 }
 
 func (q *PendingQueue) GetN(n int) (data [][]byte, startSeq int64) {
-	startSeq = q.GetFirstSequence()
-
 	iter := q.db.CreateIterator(q.rdOpts)
 	defer iter.Destroy()
 
 	iter.SeekToFirst()
+	if iter.Valid() {
+		qkey := iter.Key()
+		startSeq = ParseQueueKey(q.opts.QueueKeyPrefix, qkey)
+		if startSeq > 0 {
+			startSeq++
+		}
+	}
 	for n > 0 && iter.Valid() {
 		val := iter.Value()
 		data = append(data, val)
@@ -124,35 +129,19 @@ func (q *PendingQueue) GetN(n int) (data [][]byte, startSeq int64) {
 	return
 }
 
-func (q *PendingQueue) Trim(startSeq int64, n int) {
+// Trim pending records up to sequence number @endSeq.
+func (q *PendingQueue) Trim(endSeq int64) {
 	firstSeq := q.GetFirstSequence()
 	lastSeq := q.GetLastSequence()
-	endSeq := startSeq + int64(n)
 
-	if firstSeq > endSeq || lastSeq < startSeq {
-		// Quit if two ranges are disjoined.
-		return
-	}
-
-	// Figuring out overlapping range.
-	var overlappingStart, overlappingEnd int64
-
-	if firstSeq > startSeq {
-		overlappingStart = firstSeq
-	} else {
-		overlappingStart = startSeq
-	}
-
-	if lastSeq > endSeq {
-		overlappingEnd = endSeq
-	} else {
-		overlappingEnd = lastSeq
+	if endSeq < lastSeq {
+		lastSeq = endSeq
 	}
 
 	batch := db.NewWriteBatch()
 	defer batch.Destroy()
 
-	for seq := overlappingStart; seq < overlappingEnd; seq++ {
+	for seq := firstSeq; seq < lastSeq; seq++ {
 		key := GetQueueKey(q.opts.QueueKeyPrefix, seq)
 		batch.Delete(key)
 	}
