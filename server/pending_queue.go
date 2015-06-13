@@ -15,7 +15,6 @@ const (
 type PendingQueueOptions struct {
 	QueuePath      string
 	QueueKeyPrefix string
-	NumReplicas    int
 }
 
 type PendingQueue struct {
@@ -89,6 +88,10 @@ func (q *PendingQueue) GetFirstSequence() int64 {
 		q.firstSeq = ParseQueueKey(q.opts.QueueKeyPrefix, qk)
 	}
 
+	if q.firstSeq == q.GetLastSequence() {
+		q.firstSeq++
+	}
+
 	return q.firstSeq
 }
 
@@ -122,28 +125,39 @@ func (q *PendingQueue) GetN(n int) (data [][]byte, startSeq int64) {
 }
 
 func (q *PendingQueue) Trim(startSeq int64, n int) {
-	seq := q.GetFirstSequence()
+	firstSeq := q.GetFirstSequence()
+	lastSeq := q.GetLastSequence()
+	endSeq := startSeq + int64(n)
 
-	// Adjust start sequence.
-	diff := seq - startSeq
-	intdiff := int(diff)
-	if int64(intdiff) != diff {
-		log.Panic("Integer overflow!")
+	if firstSeq > endSeq || lastSeq < startSeq {
+		// Quit if two ranges are disjoined.
+		return
 	}
-	startSeq = seq
-	n = n - intdiff
+
+	// Figuring out overlapping range.
+	var overlappingStart, overlappingEnd int64
+
+	if firstSeq > startSeq {
+		overlappingStart = firstSeq
+	} else {
+		overlappingStart = startSeq
+	}
+
+	if lastSeq > endSeq {
+		overlappingEnd = endSeq
+	} else {
+		overlappingEnd = lastSeq
+	}
 
 	batch := db.NewWriteBatch()
 	defer batch.Destroy()
 
-	for n > 0 {
-		key := GetQueueKey(q.opts.QueueKeyPrefix, startSeq)
+	for seq := overlappingStart; seq < overlappingEnd; seq++ {
+		key := GetQueueKey(q.opts.QueueKeyPrefix, seq)
 		batch.Delete(key)
-
-		n--
-		startSeq++
 	}
 
+	q.firstSeq = 0
 	err := q.db.Write(q.wrOpts, batch)
 	if err != nil {
 		log.Fatal("Fails to write a batch: ", err)
