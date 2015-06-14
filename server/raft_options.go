@@ -4,11 +4,6 @@ import (
 	"lbase/balancer"
 )
 
-// This interface collects pending records from members of raft quorum.
-type RecordCollector interface {
-	Collect(locs []balancer.ServerName) map[balancer.ServerName][][]byte
-}
-
 type RaftOptions struct {
 	// An ID uniquely identify this raft quorum.
 	Region balancer.Region

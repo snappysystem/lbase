@@ -107,18 +107,22 @@ func (q *PendingQueue) Put(data []byte) {
 	}
 }
 
-func (q *PendingQueue) GetN(n int) (data [][]byte, startSeq int64) {
+func (q *PendingQueue) GetN(seq int64, n int) (data [][]byte, startSeq int64) {
 	iter := q.db.CreateIterator(q.rdOpts)
 	defer iter.Destroy()
 
-	iter.SeekToFirst()
-	if iter.Valid() {
-		qkey := iter.Key()
-		startSeq = ParseQueueKey(q.opts.QueueKeyPrefix, qkey)
-		if startSeq > 0 {
-			startSeq++
-		}
+	key := GetQueueKey(q.opts.QueueKeyPrefix, seq)
+	iter.Seek(key)
+
+	if !iter.Valid() {
+		return
 	}
+
+	if bytes.Compare(iter.Key(), key) != 0 {
+		log.Panic("Cannot find starting key!")
+	}
+
+	startSeq = seq
 	for n > 0 && iter.Valid() {
 		val := iter.Value()
 		data = append(data, val)

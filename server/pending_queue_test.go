@@ -30,7 +30,7 @@ func TestPendingQueueInsertAndTrim(t *testing.T) {
 		queue.Put([]byte(str))
 	}
 
-	res, _ := queue.GetN(len(items))
+	res, _ := queue.GetN(1, len(items))
 	if len(res) != len(items) {
 		t.Error("Fails to get items")
 	}
@@ -87,7 +87,7 @@ func TestPendingQueueInsertAndTrimAfterRestart(t *testing.T) {
 	queue.Close()
 
 	queue = NewPendingQueue(&opts)
-	res, _ := queue.GetN(len(items))
+	res, _ := queue.GetN(1, len(items))
 	if len(res) != len(items) {
 		t.Error("Fails to get items")
 	}
