@@ -19,7 +19,7 @@ var (
 // Request to add data to pending queue.
 type AddDataRequest struct {
 	Region balancer.Region
-	Data []byte
+	Data   []byte
 }
 
 // Response to AddData request.
@@ -29,15 +29,25 @@ type AddDataReply struct {
 
 // Request to get N records from a member of quorum.
 type GetNRecordsRequest struct {
-	Region balancer.Region
-	StartSequence int64
+	Region          balancer.Region
+	StartSequence   int64
 	NumberOfRecords int
 }
 
 // Response to GetNRecords.
 type GetNRecordsReply struct {
-	Ok bool
+	Ok      bool
 	Records [][]byte
+}
+
+// Trim pending queue to the required sequence number.
+type TrimPendingQueueRequest struct {
+	Region      balancer.Region
+	EndSequence int64
+}
+
+type TrimPendingQueueReply struct {
+	Ok bool
 }
 
 // Request to get the state of a raft member.
@@ -52,7 +62,7 @@ type RaftStateReply struct {
 }
 
 type ServerRPC struct {
-	regionRaftMap map[balancer.Region]*RaftStates
+	regionRaftMap  map[balancer.Region]*RaftStates
 	regionQueueMap map[balancer.Region]*PendingQueue
 }
 
@@ -111,6 +121,18 @@ func (s *ServerRPC) GetNRecords(
 		if seq > 0 {
 			resp.Ok = true
 		}
+	}
+	return nil
+}
+
+func (s *ServerRPC) TrimPendingQueue(
+	req *TrimPendingQueueRequest,
+	resp *TrimPendingQueueReply) error {
+
+	queue, found := s.regionQueueMap[req.Region]
+	if found {
+		queue.Trim(req.EndSequence)
+		resp.Ok = true
 	}
 	return nil
 }

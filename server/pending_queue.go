@@ -156,4 +156,3 @@ func (q *PendingQueue) Trim(endSeq int64) {
 		log.Fatal("Fails to write a batch: ", err)
 	}
 }
-
