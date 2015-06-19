@@ -204,6 +204,7 @@ func (s *RaftStates) LeaderLoop(term int64) {
 	// TODO: How to get those records?
 	pendingRecords := make(map[RaftSequence][]byte)
 
+	callName := "ServerRPC.AppendEntries"
 	for {
 		if s.state != RAFT_LEADER {
 			return
@@ -218,15 +219,9 @@ func (s *RaftStates) LeaderLoop(term int64) {
 		}()
 
 		lastSeq := s.db.GetRaftSequence()
-		cliMap := make(map[balancer.ServerName]*rpc.Client)
+		callMap := make(map[balancer.ServerName]RequestInfo)
 
 		for _, sn := range s.opts.Members {
-			// Make a connection to each of servers in the quorum.
-			cli := s.GetClient(sn)
-			if cli != nil {
-				cliMap[sn] = cli
-			}
-
 			// If we do not know the progress of a particular server yet,
 			// assume that it is already caught up.
 			_, found := progMap[sn]
@@ -234,12 +229,16 @@ func (s *RaftStates) LeaderLoop(term int64) {
 				progMap[sn] = lastSeq
 				unknownProgressMap[sn] = true
 			}
-		}
 
-		callMap := make(map[balancer.ServerName]*rpc.Call)
+			// Make a connection to each of servers in the quorum.
+			cli := s.GetClient(sn)
+			if cli == nil {
+				continue
+			}
 
-		// Send RPC to each of member servers.
-		for sn, cli := range cliMap {
+			info := RequestInfo{Cli: cli}
+
+			// Send RPC to each of member servers.
 			req := AppendEntries{
 				ServerName: s.opts.Address,
 				Term:       term,
@@ -268,9 +267,8 @@ func (s *RaftStates) LeaderLoop(term int64) {
 			}
 
 			var reply AppendEntriesReply
-			callName := "ServerRPC.AppendEntries"
-
-			callMap[sn] = cli.Go(callName, &req, &reply, nil)
+			info.Call = cli.Go(callName, &req, &reply, nil)
+			callMap[sn] = info
 		}
 
 		var zeroSequence RaftSequence
@@ -280,10 +278,10 @@ func (s *RaftStates) LeaderLoop(term int64) {
 
 		// Processing RPC replies.
 		noLongerLeader := false
-		for sn, call := range callMap {
+		for sn, info := range callMap {
 			select {
-			case <-call.Done:
-				resp := call.Reply.(*AppendEntriesReply)
+			case <-info.Call.Done:
+				resp := info.Call.Reply.(*AppendEntriesReply)
 				if resp.NotLeader {
 					noLongerLeader = true
 					break
@@ -308,7 +306,7 @@ func (s *RaftStates) LeaderLoop(term int64) {
 					panic("real sequence is less than previous progress!")
 				}
 
-				s.ReturnClient(sn, cliMap[sn])
+				s.ReturnClient(sn, info.Cli)
 			case <-timeChan:
 				timeChan = time.After(time.Duration(0))
 			}
