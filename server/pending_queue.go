@@ -32,10 +32,10 @@ import (
 	"log"
 )
 
-const (
-	// Estimate of an average log item's size.
-	AvgItemSize = 200
-)
+// A PendingQueue stores client's update requests before raft leader
+// collect them. Each member of the quorum has a pending queue. Once
+// the records have been collected by the leader and committed to
+// the quorum, they can be removed safely from the pending queue.
 
 type PendingQueueOptions struct {
 	QueuePath      string

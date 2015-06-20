@@ -33,6 +33,10 @@ import (
 	"time"
 )
 
+// RecordCollector is used by the leader of a quorum to collect pending records,
+// and then notify member of the quorum that the records have been committed
+// so that they can release the storage for those records.
+
 type CollectResults struct {
 	// Pending queue sequence numbers.
 	EndSequences map[balancer.ServerName]int64
