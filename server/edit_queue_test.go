@@ -30,18 +30,18 @@ import (
 	"testing"
 )
 
-func TestPendingQueueInsertAndTrim(t *testing.T) {
-	name := "PendingQueueInsertAndTrim"
+func TestEditQueueInsertAndTrim(t *testing.T) {
+	name := "EditQueueInsertAndTrim"
 	root := "/tmp/test" + name
 
 	os.RemoveAll(root)
 	os.MkdirAll(root, os.ModePerm)
 
-	opts := PendingQueueOptions{
+	opts := EditQueueOptions{
 		QueuePath:      root,
 		QueueKeyPrefix: name,
 	}
-	queue := NewPendingQueue(&opts)
+	queue := NewEditQueue(&opts)
 	defer queue.Close()
 
 	items := []string{
@@ -85,18 +85,18 @@ func TestPendingQueueInsertAndTrim(t *testing.T) {
 	}
 }
 
-func TestPendingQueueInsertAndTrimAfterRestart(t *testing.T) {
-	name := "PendingQueueInsertAndTrimAfterRestart"
+func TestEditQueueInsertAndTrimAfterRestart(t *testing.T) {
+	name := "EditQueueInsertAndTrimAfterRestart"
 	root := "/tmp/test" + name
 
 	os.RemoveAll(root)
 	os.MkdirAll(root, os.ModePerm)
 
-	opts := PendingQueueOptions{
+	opts := EditQueueOptions{
 		QueuePath:      root,
 		QueueKeyPrefix: name,
 	}
-	queue := NewPendingQueue(&opts)
+	queue := NewEditQueue(&opts)
 
 	items := []string{
 		"hello",
@@ -111,7 +111,7 @@ func TestPendingQueueInsertAndTrimAfterRestart(t *testing.T) {
 
 	queue.Close()
 
-	queue = NewPendingQueue(&opts)
+	queue = NewEditQueue(&opts)
 	res, _ := queue.GetN(1, len(items))
 	if len(res) != len(items) {
 		t.Error("Fails to get items")
@@ -135,7 +135,7 @@ func TestPendingQueueInsertAndTrimAfterRestart(t *testing.T) {
 
 	queue.Close()
 
-	queue = NewPendingQueue(&opts)
+	queue = NewEditQueue(&opts)
 	if queue.GetFirstSequence() != int64(len(items)) {
 		t.Error("Incorrect first sequence")
 	}
@@ -147,18 +147,18 @@ func TestPendingQueueInsertAndTrimAfterRestart(t *testing.T) {
 	queue.Close()
 }
 
-func TestPendingQueueInsertTrimAndInsertAgain(t *testing.T) {
-	name := "PendingQueueInsertTrimAndInsertAgain"
+func TestEditQueueInsertTrimAndInsertAgain(t *testing.T) {
+	name := "EditQueueInsertTrimAndInsertAgain"
 	root := "/tmp/test" + name
 
 	os.RemoveAll(root)
 	os.MkdirAll(root, os.ModePerm)
 
-	opts := PendingQueueOptions{
+	opts := EditQueueOptions{
 		QueuePath:      root,
 		QueueKeyPrefix: name,
 	}
-	queue := NewPendingQueue(&opts)
+	queue := NewEditQueue(&opts)
 	defer queue.Close()
 
 	items := []string{

@@ -33,12 +33,12 @@ import (
 	"time"
 )
 
-// RecordCollector is used by the leader of a quorum to collect pending records,
+// EditCollector is used by the leader of a quorum to collect pending records,
 // and then notify member of the quorum that the records have been committed
 // so that they can release the storage for those records.
 
 type CollectedResults struct {
-	// Pending queue sequence numbers.
+	// Edit queue sequence numbers.
 	EndSequences map[balancer.ServerName]int64
 	// Consensus mutations to be saved.
 	Mutations [][]byte
@@ -46,7 +46,7 @@ type CollectedResults struct {
 	Hashes []string
 }
 
-type RecordCollector struct {
+type EditCollector struct {
 	Region       balancer.Region
 	MaxRecords   int
 	RPCTimeoutMs time.Duration
@@ -59,7 +59,7 @@ type RecordCollector struct {
 // This is justified because under certain circumstances (for example, members
 // of the quorum is not available), we simply do not have enough information
 // to figure out the order.
-func (c *RecordCollector) Collect(
+func (c *EditCollector) Collect(
 	raft *RaftStates,
 	ss map[balancer.ServerName]int64) CollectedResults {
 
@@ -117,7 +117,7 @@ func (c *RecordCollector) Collect(
 	dedupMap := make(map[string]ValueInfo)
 	for _, list := range respMap {
 		for _, val := range list {
-			key := GetRecordCollectorHash(val)
+			key := GetEditCollectorHash(val)
 			vi, found := dedupMap[key]
 			if found && bytes.Compare(vi.Val, val) != 0 {
 				log.Panic("Fails to match deduped value")
@@ -164,10 +164,10 @@ func (c *RecordCollector) Collect(
 
 // Advise individual servers to trim pending queue up to the sequence numbers
 // in the map @ss.
-func (c *RecordCollector) Trim(raft *RaftStates, ss map[balancer.ServerName]int64) {
+func (c *EditCollector) Trim(raft *RaftStates, ss map[balancer.ServerName]int64) {
 	// Send collect request to quorum members.
 	cliMap := make(map[balancer.ServerName]RequestInfo)
-	callName := "ServerRPC.TrimPendingQueue"
+	callName := "ServerRPC.TrimEditQueue"
 	waitChan := time.After(c.RPCTimeoutMs * time.Millisecond)
 
 	for sn, seq := range ss {
@@ -175,11 +175,11 @@ func (c *RecordCollector) Trim(raft *RaftStates, ss map[balancer.ServerName]int6
 		if cli == nil {
 			continue
 		}
-		req := TrimPendingQueueRequest{
+		req := TrimEditQueueRequest{
 			Region:      c.Region,
 			EndSequence: seq,
 		}
-		resp := TrimPendingQueueReply{}
+		resp := TrimEditQueueReply{}
 		cliMap[sn] = RequestInfo{
 			Cli:  cli,
 			Call: cli.Go(callName, &req, &resp, nil),
@@ -197,7 +197,7 @@ func (c *RecordCollector) Trim(raft *RaftStates, ss map[balancer.ServerName]int6
 }
 
 // Compute the hash of a value.
-func GetRecordCollectorHash(val []byte) string {
+func GetEditCollectorHash(val []byte) string {
 	bk := sha1.Sum(val)
 	return string(bk[:20])
 }

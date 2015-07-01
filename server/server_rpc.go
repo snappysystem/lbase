@@ -31,12 +31,12 @@ import (
 
 type ServerRPC struct {
 	regionRaftMap  map[balancer.Region]*RaftStates
-	regionQueueMap map[balancer.Region]*PendingQueue
+	regionQueueMap map[balancer.Region]*EditQueue
 }
 
 func (s *ServerRPC) init() {
 	s.regionRaftMap = make(map[balancer.Region]*RaftStates)
-	s.regionQueueMap = make(map[balancer.Region]*PendingQueue)
+	s.regionQueueMap = make(map[balancer.Region]*EditQueue)
 }
 
 // A simple RPC method to test if the server is alive.
@@ -126,18 +126,18 @@ func (s *ServerRPC) GetNRecords(
 }
 
 // Trim pending queue to the required sequence number.
-type TrimPendingQueueRequest struct {
+type TrimEditQueueRequest struct {
 	Region      balancer.Region
 	EndSequence int64
 }
 
-type TrimPendingQueueReply struct {
+type TrimEditQueueReply struct {
 	Ok bool
 }
 
-func (s *ServerRPC) TrimPendingQueue(
-	req *TrimPendingQueueRequest,
-	resp *TrimPendingQueueReply) error {
+func (s *ServerRPC) TrimEditQueue(
+	req *TrimEditQueueRequest,
+	resp *TrimEditQueueReply) error {
 
 	queue, found := s.regionQueueMap[req.Region]
 	if found {

@@ -29,5 +29,5 @@ import (
 	"testing"
 )
 
-func TestRecordCollectorCollect(t *testing.T) {
+func TestEditCollectorCollect(t *testing.T) {
 }

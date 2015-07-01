@@ -48,7 +48,7 @@ type RaftOptions struct {
 	// HTTP RPC path prefix.
 	RPCPrefix string
 	// How to collect incoming raft records.
-	Collector RecordCollector
+	Collector EditCollector
 }
 
 func DefaultRaftOptions(root string) *RaftOptions {

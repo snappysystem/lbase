@@ -32,18 +32,18 @@ import (
 	"log"
 )
 
-// A PendingQueue stores client's update requests before raft leader
+// A EditQueue stores client's update requests before raft leader
 // collect them. Each member of the quorum has a pending queue. Once
 // the records have been collected by the leader and committed to
 // the quorum, they can be removed safely from the pending queue.
 
-type PendingQueueOptions struct {
+type EditQueueOptions struct {
 	QueuePath      string
 	QueueKeyPrefix string
 }
 
-type PendingQueue struct {
-	opts     PendingQueueOptions
+type EditQueue struct {
+	opts     EditQueueOptions
 	db       db.Db
 	lastSeq  int64
 	firstSeq int64
@@ -65,7 +65,7 @@ func ParseQueueKey(prefix string, qkey []byte) int64 {
 	return seq
 }
 
-func NewPendingQueue(opts *PendingQueueOptions) *PendingQueue {
+func NewEditQueue(opts *EditQueueOptions) *EditQueue {
 	dbopts := db.NewDbOptions()
 	dbopts.SetCreateIfMissing(1)
 
@@ -74,7 +74,7 @@ func NewPendingQueue(opts *PendingQueueOptions) *PendingQueue {
 		return nil
 	}
 
-	return &PendingQueue{
+	return &EditQueue{
 		opts:   *opts,
 		db:     store,
 		wrOpts: db.NewWriteOptions(),
@@ -82,11 +82,11 @@ func NewPendingQueue(opts *PendingQueueOptions) *PendingQueue {
 	}
 }
 
-func (q *PendingQueue) Close() {
+func (q *EditQueue) Close() {
 	q.db.Close()
 }
 
-func (q *PendingQueue) GetLastSequence() int64 {
+func (q *EditQueue) GetLastSequence() int64 {
 	if q.lastSeq != 0 {
 		return q.lastSeq
 	}
@@ -103,7 +103,7 @@ func (q *PendingQueue) GetLastSequence() int64 {
 	return q.lastSeq
 }
 
-func (q *PendingQueue) GetFirstSequence() int64 {
+func (q *EditQueue) GetFirstSequence() int64 {
 	if q.firstSeq != 0 {
 		return q.firstSeq
 	}
@@ -120,7 +120,7 @@ func (q *PendingQueue) GetFirstSequence() int64 {
 	return q.firstSeq
 }
 
-func (q *PendingQueue) Put(data []byte) {
+func (q *EditQueue) Put(data []byte) {
 	lastSeq := q.GetLastSequence()
 	lastSeq++
 	q.lastSeq = lastSeq
@@ -132,7 +132,7 @@ func (q *PendingQueue) Put(data []byte) {
 	}
 }
 
-func (q *PendingQueue) GetN(seq int64, n int) (data [][]byte, startSeq int64) {
+func (q *EditQueue) GetN(seq int64, n int) (data [][]byte, startSeq int64) {
 	iter := q.db.CreateIterator(q.rdOpts)
 	defer iter.Destroy()
 
@@ -159,7 +159,7 @@ func (q *PendingQueue) GetN(seq int64, n int) (data [][]byte, startSeq int64) {
 }
 
 // Trim pending records up to sequence number @endSeq.
-func (q *PendingQueue) Trim(endSeq int64) {
+func (q *EditQueue) Trim(endSeq int64) {
 	firstSeq := q.GetFirstSequence()
 	lastSeq := q.GetLastSequence()
 

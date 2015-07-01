@@ -117,7 +117,7 @@ func (s *Server) GetDebugPath() string {
 func (s *Server) RegisterRegion(
 	r balancer.Region,
 	states *RaftStates,
-	queue *PendingQueue) {
+	queue *EditQueue) {
 	s.regionRaftMap[r] = states
 	s.regionQueueMap[r] = queue
 }
