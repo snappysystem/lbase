@@ -33,7 +33,7 @@ import (
 
 func TestServerAlive(t *testing.T) {
 	rpcPathPrefix := "TestServerAlive"
-	serv, port := NewServerAndPort(rpcPathPrefix)
+	serv, port := NewServer(rpcPathPrefix, 0)
 	if serv == nil {
 		t.Error("Fails to create a server!")
 	}
@@ -63,7 +63,7 @@ func TestServerAlive(t *testing.T) {
 
 func TestAsyncCall(t *testing.T) {
 	rpcPathPrefix := "TestAsyncCall"
-	serv, port := NewServerAndPort(rpcPathPrefix)
+	serv, port := NewServer(rpcPathPrefix, 0)
 	if serv == nil {
 		t.Error("Fails to create a server!")
 	}

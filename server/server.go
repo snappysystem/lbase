@@ -31,10 +31,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-)
-
-const (
-	listenPortBase = 8080
+	"strconv"
 )
 
 var (
@@ -61,19 +58,32 @@ func GetServerPath(prefix string, port int) (rpcPath, debugPath string) {
 	return
 }
 
-func NewServer(prefix string, port int) *Server {
+func NewServer(prefix string, port int) (s *Server, rport int) {
 	l, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if e != nil {
 		fmt.Println("Fails to listen:", e)
-		return nil
+		return
 	}
 
-	rpcPath, debugPath := GetServerPath(prefix, port)
+	_, strPort, perr := net.SplitHostPort(l.Addr().String())
+	if perr != nil {
+		l.Close()
+		return
+	}
 
-	s := &Server{
+	tmpInt, parseErr := strconv.ParseInt(strPort, 0, 0)
+	if parseErr != nil {
+		l.Close()
+		return
+	}
+
+	rport = int(tmpInt)
+	rpcPath, debugPath := GetServerPath(prefix, rport)
+
+	s = &Server{
 		ServerRPC: ServerRPC{},
 		impl:      rpc.NewServer(),
-		port:      port,
+		port:      rport,
 		rpcPath:   rpcPath,
 		debugPath: debugPath,
 		listener:  l,
@@ -86,19 +96,6 @@ func NewServer(prefix string, port int) *Server {
 
 	go http.Serve(l, nil)
 
-	return s
-}
-
-// Find an available port, return a new server and the associated
-// port number.
-func NewServerAndPort(prefix string) (s *Server, port int) {
-	for i := listenPortBase; i < listenPortBase+1000; i++ {
-		s = NewServer(prefix, i)
-		if s != nil {
-			port = i
-			return
-		}
-	}
 	return
 }
 

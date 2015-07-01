@@ -46,7 +46,7 @@ func initRaftStates(
 
 	opts := store.GetRaftOptions()
 	states = NewRaftStates(opts, store)
-	server, _ = NewServerAndPort(root)
+	server, _ = NewServer(root, 0)
 
 	if server != nil && states != nil {
 		server.RegisterRegion(reg, states, nil)
@@ -64,7 +64,7 @@ func initRaftQuorum(
 	// First creates @num servers.
 	var ports []int
 	for i := 0; i < num; i++ {
-		server, port := NewServerAndPort(root)
+		server, port := NewServer(root, 0)
 		if server == nil {
 			panic("Fails to create a server")
 		}
