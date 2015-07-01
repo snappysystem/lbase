@@ -37,7 +37,7 @@ import (
 // and then notify member of the quorum that the records have been committed
 // so that they can release the storage for those records.
 
-type CollectResults struct {
+type CollectedResults struct {
 	// Pending queue sequence numbers.
 	EndSequences map[balancer.ServerName]int64
 	// Consensus mutations to be saved.
@@ -61,9 +61,9 @@ type RecordCollector struct {
 // to figure out the order.
 func (c *RecordCollector) Collect(
 	raft *RaftStates,
-	ss map[balancer.ServerName]int64) CollectResults {
+	ss map[balancer.ServerName]int64) CollectedResults {
 
-	var res CollectResults
+	var res CollectedResults
 	waitChan := time.After(c.RPCTimeoutMs * time.Millisecond)
 
 	// Send collect request to quorum members.
@@ -117,8 +117,7 @@ func (c *RecordCollector) Collect(
 	dedupMap := make(map[string]ValueInfo)
 	for _, list := range respMap {
 		for _, val := range list {
-			bk := sha1.Sum(val)
-			key := string(bk[:20])
+			key := GetRecordCollectorHash(val)
 			vi, found := dedupMap[key]
 			if found && bytes.Compare(vi.Val, val) != 0 {
 				log.Panic("Fails to match deduped value")
@@ -160,7 +159,7 @@ func (c *RecordCollector) Collect(
 		}
 	}
 
-	return CollectResults{}
+	return CollectedResults{}
 }
 
 // Advise individual servers to trim pending queue up to the sequence numbers
@@ -198,7 +197,7 @@ func (c *RecordCollector) Trim(raft *RaftStates, ss map[balancer.ServerName]int6
 }
 
 // Compute the hash of a value.
-func (col *RecordCollector) Hash(val []byte) string {
+func GetRecordCollectorHash(val []byte) string {
 	bk := sha1.Sum(val)
 	return string(bk[:20])
 }
