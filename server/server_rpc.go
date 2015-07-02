@@ -30,13 +30,11 @@ import (
 )
 
 type ServerRPC struct {
-	regionRaftMap  map[balancer.Region]*RaftStates
-	regionQueueMap map[balancer.Region]*EditQueue
+	regionRaftMap map[balancer.Region]*RaftStates
 }
 
 func (s *ServerRPC) init() {
 	s.regionRaftMap = make(map[balancer.Region]*RaftStates)
-	s.regionQueueMap = make(map[balancer.Region]*EditQueue)
 }
 
 // A simple RPC method to test if the server is alive.
@@ -90,9 +88,9 @@ type AddDataReply struct {
 }
 
 func (s *ServerRPC) AddData(req *AddDataRequest, resp *AddDataReply) error {
-	queue, found := s.regionQueueMap[req.Region]
+	raft, found := s.regionRaftMap[req.Region]
 	if found {
-		queue.Put(req.Data)
+		raft.GetEditQueue().Put(req.Data)
 		resp.Ok = true
 	}
 	return nil
@@ -114,9 +112,10 @@ func (s *ServerRPC) GetNRecords(
 	req *GetNRecordsRequest,
 	resp *GetNRecordsReply) error {
 
-	queue, found := s.regionQueueMap[req.Region]
+	raft, found := s.regionRaftMap[req.Region]
 	if found {
 		var seq int64
+		queue := raft.GetEditQueue()
 		resp.Records, seq = queue.GetN(req.StartSequence, req.NumberOfRecords)
 		if seq > 0 {
 			resp.Ok = true
@@ -139,9 +138,9 @@ func (s *ServerRPC) TrimEditQueue(
 	req *TrimEditQueueRequest,
 	resp *TrimEditQueueReply) error {
 
-	queue, found := s.regionQueueMap[req.Region]
+	raft, found := s.regionRaftMap[req.Region]
 	if found {
-		queue.Trim(req.EndSequence)
+		raft.GetEditQueue().Trim(req.EndSequence)
 		resp.Ok = true
 	}
 	return nil

@@ -70,6 +70,11 @@ func NewRaftStates(opts *RaftOptions, db *RaftStorage) *RaftStates {
 	}
 
 	if opts.Collector == nil {
+		opts.Collector = &EditCollector{
+			Region:       opts.Region,
+			MaxRecords:   1000,
+			RPCTimeoutMs: time.Duration(100) * time.Millisecond,
+		}
 	}
 
 	return &RaftStates{

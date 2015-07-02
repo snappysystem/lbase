@@ -111,29 +111,15 @@ func (s *Server) GetDebugPath() string {
 	return s.debugPath
 }
 
-func (s *Server) RegisterRegion(
-	r balancer.Region,
-	states *RaftStates,
-	queue *EditQueue) {
+func (s *Server) RegisterRegion(r balancer.Region, states *RaftStates) {
 	s.regionRaftMap[r] = states
-	s.regionQueueMap[r] = queue
 }
 
 func (s *Server) UnregisterRegion(r balancer.Region) {
-	{
-		val, found := s.regionRaftMap[r]
-		if found {
-			val.Close()
-			delete(s.regionRaftMap, r)
-		}
-	}
-
-	{
-		val, found := s.regionQueueMap[r]
-		if found {
-			val.Close()
-			delete(s.regionQueueMap, r)
-		}
+	val, found := s.regionRaftMap[r]
+	if found {
+		val.Close()
+		delete(s.regionRaftMap, r)
 	}
 }
 

@@ -49,7 +49,7 @@ func initRaftStates(
 	server, _ = NewServer(root, 0)
 
 	if server != nil && states != nil {
-		server.RegisterRegion(reg, states, nil)
+		server.RegisterRegion(reg, states)
 	}
 
 	return
@@ -96,7 +96,7 @@ func initRaftQuorum(
 		states := NewRaftStates(opts, store)
 		rss = append(rss, states)
 
-		servers[i].RegisterRegion(reg, states, nil)
+		servers[i].RegisterRegion(reg, states)
 	}
 
 	// Put state machines into FOLLOWER mode.
