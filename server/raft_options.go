@@ -26,6 +26,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package server
 
 import (
+	"fmt"
 	"lbase/balancer"
 )
 
@@ -36,8 +37,8 @@ type RaftOptions struct {
 	Members []balancer.ServerName
 	// The network access point of myself.
 	Address balancer.ServerName
-	// Path to log db.
-	LogDbRoot string
+	// File Path to save raft data.
+	RaftRoot string
 	// If candidate cannot proceed, how long in millisecond
 	// the candidate should wait until retry again.
 	CandidateWaitMs int64
@@ -47,13 +48,15 @@ type RaftOptions struct {
 	RaftLeaderTimeoutMs int64
 	// HTTP RPC path prefix.
 	RPCPrefix string
-	// How to collect incoming raft records.
-	Collector EditCollector
+	// If this is nil, RaftStates will create one.
+	EditQueue *EditQueue
+	// If this is nil, RaftStates will create one.
+	Collector *EditCollector
 }
 
 func DefaultRaftOptions(root string) *RaftOptions {
 	return &RaftOptions{
-		LogDbRoot:            root,
+		RaftRoot:             root,
 		CandidateWaitMs:      4000,
 		RequestVoteTimeoutMs: 2000,
 		RaftLeaderTimeoutMs:  60000,
@@ -62,9 +65,17 @@ func DefaultRaftOptions(root string) *RaftOptions {
 
 func RaftOptionsForTest(root string) *RaftOptions {
 	return &RaftOptions{
-		LogDbRoot:            root,
+		RaftRoot:             root,
 		CandidateWaitMs:      800,
 		RequestVoteTimeoutMs: 400,
 		RaftLeaderTimeoutMs:  200,
 	}
+}
+
+func (opts *RaftOptions) GetLogDir() string {
+	return fmt.Sprintf("%s/log", opts.RaftRoot)
+}
+
+func (opts *RaftOptions) GetEditQueueDir() string {
+	return fmt.Sprintf("%s/editq", opts.RaftRoot)
 }

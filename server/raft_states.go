@@ -30,6 +30,7 @@ import (
 	"lbase/balancer"
 	"log"
 	"net/rpc"
+	"os"
 	"time"
 )
 
@@ -57,6 +58,20 @@ type RaftStates struct {
 }
 
 func NewRaftStates(opts *RaftOptions, db *RaftStorage) *RaftStates {
+	os.MkdirAll(opts.GetLogDir(), os.ModePerm)
+	os.MkdirAll(opts.GetEditQueueDir(), os.ModePerm)
+
+	if opts.EditQueue == nil {
+		editQueueOpts := EditQueueOptions{
+			QueuePath:      opts.GetEditQueueDir(),
+			QueueKeyPrefix: "queue_key:",
+		}
+		opts.EditQueue = NewEditQueue(&editQueueOpts)
+	}
+
+	if opts.Collector == nil {
+	}
+
 	return &RaftStates{
 		state:              RAFT_FOLLOWER,
 		opts:               opts,
@@ -501,6 +516,14 @@ func (s *RaftStates) Close() {
 
 func (s *RaftStates) GetStorage() *RaftStorage {
 	return s.db
+}
+
+func (s *RaftStates) GetEditQueue() *EditQueue {
+	return s.opts.EditQueue
+}
+
+func (s *RaftStates) GetCollector() *EditCollector {
+	return s.opts.Collector
 }
 
 func (s *RaftStates) preparePendingRecords() map[RaftSequence][]byte {

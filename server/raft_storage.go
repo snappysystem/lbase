@@ -61,7 +61,7 @@ func NewRaftStorage(opts *RaftOptions, store *RegionStore) (ret *RaftStorage, er
 	logopts := db.NewDbOptions()
 	logopts.SetCreateIfMissing(1)
 
-	log, openError := db.OpenDb(logopts, opts.LogDbRoot)
+	log, openError := db.OpenDb(logopts, opts.GetLogDir())
 	if openError != nil {
 		err = openError
 		return
