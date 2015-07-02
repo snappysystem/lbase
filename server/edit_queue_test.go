@@ -52,7 +52,7 @@ func TestEditQueueInsertAndTrim(t *testing.T) {
 	}
 
 	for _, str := range items {
-		queue.Put([]byte(str))
+		queue.AppendEdit([]byte(str))
 	}
 
 	res, _ := queue.GetN(1, len(items))
@@ -106,7 +106,7 @@ func TestEditQueueInsertAndTrimAfterRestart(t *testing.T) {
 	}
 
 	for _, str := range items {
-		queue.Put([]byte(str))
+		queue.AppendEdit([]byte(str))
 	}
 
 	queue.Close()
@@ -169,7 +169,7 @@ func TestEditQueueInsertTrimAndInsertAgain(t *testing.T) {
 	}
 
 	for _, str := range items {
-		queue.Put([]byte(str))
+		queue.AppendEdit([]byte(str))
 	}
 
 	queue.Trim(int64(len(items)))
@@ -182,7 +182,7 @@ func TestEditQueueInsertTrimAndInsertAgain(t *testing.T) {
 	}
 
 	for _, str := range items {
-		queue.Put([]byte(str))
+		queue.AppendEdit([]byte(str))
 	}
 
 	if queue.GetFirstSequence() != int64(len(items)) {

@@ -120,7 +120,7 @@ func (q *EditQueue) GetFirstSequence() int64 {
 	return q.firstSeq
 }
 
-func (q *EditQueue) Put(data []byte) {
+func (q *EditQueue) AppendEdit(data []byte) {
 	lastSeq := q.GetLastSequence()
 	lastSeq++
 	q.lastSeq = lastSeq

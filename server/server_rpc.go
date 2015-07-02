@@ -77,20 +77,20 @@ func (s *ServerRPC) GetRaftState(req RaftStateRequest, resp *RaftStateReply) err
 	return nil
 }
 
-// Request to add data to pending queue.
-type AddDataRequest struct {
+// Request to append a new edit. The edit may not be immediately committed.
+type AppendEditRequest struct {
 	Region balancer.Region
 	Data   []byte
 }
 
-type AddDataReply struct {
+type AppendEditReply struct {
 	Ok bool
 }
 
-func (s *ServerRPC) AddData(req *AddDataRequest, resp *AddDataReply) error {
+func (s *ServerRPC) AppendEdit(req *AppendEditRequest, resp *AppendEditReply) error {
 	raft, found := s.regionRaftMap[req.Region]
 	if found {
-		raft.GetEditQueue().Put(req.Data)
+		raft.GetEditQueue().AppendEdit(req.Data)
 		resp.Ok = true
 	}
 	return nil
